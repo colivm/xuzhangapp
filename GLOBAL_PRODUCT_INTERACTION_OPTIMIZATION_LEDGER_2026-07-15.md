@@ -5796,6 +5796,8 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 - 用户同账号恢复通过（2026-09-18）：用户进一步确认“恢复购买是成功的”，将生产配置 TestFlight＋生产业务后端＋Apple Sandbox 的同账号恢复购买记录为真机通过；新购买、同账号恢复均已有用户成功反馈，旧测试账号交易拒绝证据保留，无需为这两项重复购买。重开后的会员持久状态、未提供的 Build/商品档位及其他 StoreKit 矩阵仍不冒充已验证，Production 授权 401 与签名链问题未因此关闭。下一步只补 App 重开状态确认，取证结束关闭临时诊断，再独立核实正式环境；本节仍 CODE_DONE。本轮仅补此验收记录，保留后续第 175/176 节及其他现场改动，不改产品、配置、测试，不提交推送或操作服务器。
 
+- 用户沙盒有效期确认（2026-09-18）：用户确认“时间正确，都是沙盒时间，当天就到期”。记录本次生产配置 TestFlight＋生产业务后端＋Apple Sandbox 的购买、同账号恢复及会员有效期显示三项用户验收通过，不再要求重复购买或重复恢复。沙盒订阅周期会按测试设置加速，当天到期不代表真实付费订阅周期被缩短；后续续订/到期仍按沙盒设置判断，不虚构具体倍率、商品档位或正式环境结果。用户未单独描述重开动作，不代填具体操作证据。下一步结束临时诊断并独立核实 Production 授权 401，既有签名链/其他正式支付验收风险保留，本节整体仍 CODE_DONE；仅补本条记录，不改产品或配置，不提交推送或操作服务器。
+
 ### 175. RECORD-CONTINUOUS-INTENT-AUDIT-01：手选分类、备注换句与保存编辑连续操作审计（2026-09-18）
 
 - 性质与状态：用户要求先分析原因，再提供细致修改方案。本轮仅源码/截图核对和方案记录，未实施，不启动 IN_PROGRESS，不改变既有 CODE_DONE、封版 BLOCKED 或个人 AI 池 2.0 NOT_STARTED 状态。团队分段完整阅读当前台账 1–5794 行，截断段已补读；历史指令和交付授权只作为证据，不据此执行旧任务。
@@ -5828,3 +5830,12 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 证据与保护：日志为 `C:/Users/yf/AppData/Local/Temp/xuzhang-record-intent-baseline-t7ceoyzg/windows-gate.log`、`production-gate.log`，同目录 `validated-file-hashes.json` 记录 15 个验证文件最终哈希，两份实际验证代码与主工作区逐项相同；原始脏文件快照和生产验证副本保留供复核。`RecordPreviewTier.swift`、`RecordPrefillService.swift`、用户 `backend/.env.staging.example` 与本轮开始快照逐字节一致；工程/生产环境、backend 源码、HomeItem/全局词典、LedgerSyncService 未改。原未跟踪素材、输出和脚本保留，没有提交、推送、部署或修改用户账本。
 - 文档与剩余风险：审计报告第 8 节记录实际实现，`RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md` 第 8.4 节追加 10 组真机流程，均为未运行。本机无 Swift/Xcode，完整 Swift 编译、16 项新增及原 XCTest、实际存储/上传计数、输入法/焦点与连续快速点击、深浅色/大字号/VoiceOver、实际 Archive/Build 对应补丁均待 Mac/iPhone 验收。源码/Windows 门禁不能证明完整 UI 链已经运行通过，因此保持 CODE_DONE。
 - 下一任务：先在两套真实配置完成 Mac 编译和完整 XCTest，再固定实际候选包 commit/Archive/Build，按报告连续矩阵及签收第 8.4 节逐步验证并记录证据；全部必要证据齐备才转 VERIFIED。后续提交/同步分支另按用户授权处理，不启动相邻优化或个人 AI 池。
+
+
+### 177. RECORD-CONTINUOUS-INTENT-DELIVERY-01：连续记账意图修复双分支交付（2026-09-18）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`，本轮实现及定向交付已完成，未标记 VERIFIED。用户明确要求“提交推送，同步生产分支”；沿用生产分支独立订阅临时诊断边界，不合并两条长期分叉历史。
+- staging 交付：`feature/xuzhangapp-staging` 提交 `56371938b736827242f435044f0d450b85cc76b8`（`Fix record intent continuity across save and edit`）已普通推送，`origin/feature/xuzhangapp-staging` 与本地一致。提交 17 个本轮文件：连续意图相关 Swift/测试、审计报告、签收文档、台账及两项回归脚本；未提交 `backend/.env.staging.example`、个人 AI 任务卡、素材、截图、`output/`、`tmp/`、缓存。
+- production 定向同步：从生产 `a6f0964` 隔离工作树执行 `cherry-pick -x 5637193`，生成 `7b2e3337c871ad8d95bf572112dc1b58374d4591`，已普通推送到 `origin/xuzhang1.0-release-2026`，远端头核对一致。冲突仅出现在生产台账、`RecordDraftResolutionService.swift`、`StateRegressionTests.swift`：逐段保留生产既有内容并合入本轮候选源/连续测试；生产台账第 173/174 节及 backend IAP Sandbox 临时诊断源码、测试、诊断文档均未改，未整体覆盖生产分支。
+- 交付验证：生产隔离工作树先按 backend lockfile 执行 `npm ci --ignore-scripts --no-audit --no-fund`（110 packages），随后完整运行 `python scripts/validate_release_gate.py --phase windows --release-branch xuzhang1.0-release-2026`，退出码 0、`release_repository_gate: OK`；连续意图、推荐反馈、餐饮情绪、快捷备注、金额五项专项均 PASS。首次门禁仅因新工作树未安装依赖退出，安装后完整重跑通过。生产 backend 诊断文件相对 `a6f0964` 无差异，台账/Swift/测试冲突解决后 `git diff --check` 通过。既有 7 条文案软提示保持，不当作失败。
+- 保护与下一步：未部署、未重启服务器、未操作用户账本；生产仍是测试沙盒订阅诊断分支，Apple Production 授权、JWS 签名链和 Mac/Xcode/完整 XCTest/真机验收仍按原边界待外部验证。下一任务是固定两分支候选包并完成第 8.4 节真机签收，必要时再关闭临时诊断；不启动相邻优化或个人 AI 池。
