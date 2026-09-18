@@ -7107,8 +7107,8 @@ struct StatsWebView: View {
         FocusedRecordEditor(
             item: item,
             autoCommitRequestID: traceAutoCommitRequestID,
-            onSave: { updated in
-                let didSave = homeViewModel.updateItem(updated)
+            onSave: { updated, intent in
+                let didSave = homeViewModel.updateItem(updated, editIntent: intent)
                 if didSave {
                     withAnimation(traceEditSpring) {
                         traceInlineEditingItemID = nil
@@ -7400,8 +7400,8 @@ struct StatsWebView: View {
     }
 
     private func editSheet(for item: HomeItem) -> some View {
-        RecordEditSheet(item: item) { updated in
-            let didSave = homeViewModel.updateItem(updated)
+        RecordEditSheet(item: item) { updated, intent in
+            let didSave = homeViewModel.updateItem(updated, editIntent: intent)
             if didSave {
                 editingItem = nil
             }

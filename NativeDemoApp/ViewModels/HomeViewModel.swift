@@ -320,6 +320,28 @@ enum RecordQuickNotePolicy {
         Evidence(anchor).accepts(Evidence(title))
     }
 
+    /// Additional filtering only after real handwriting. Defaults based on the
+    /// clock/history cannot add a different meal, merchant, food or circumstance.
+    static func respectsHandwrittenAnchor(_ title: String, anchor: String) -> Bool {
+        let original = Evidence(anchor)
+        let candidate = Evidence(title)
+        guard candidate.brandID == nil || candidate.brandID == original.brandID,
+              candidate.food == nil || candidate.food == original.food,
+              candidate.family == nil || candidate.family == original.family,
+              RecordSemanticLexicon.matchingEmotionRuleIDs(in: title).isSubset(
+                of: RecordSemanticLexicon.matchingEmotionRuleIDs(in: anchor)
+              ) else { return false }
+        let facts = [
+            ["早餐", "早饭"], ["午餐", "午饭"], ["晚餐", "晚饭"], ["夜宵", "宵夜"],
+            ["热乎", "热食", "热饭", "热汤"], ["加班"], ["晚归"], ["出差"],
+            ["下雨", "雨天", "雨中"], ["下雪", "雪天", "雪中"], ["冷天", "低温"],
+            ["热天", "高温"], ["上班"], ["下班"], ["地铁"], ["公交"], ["打车", "网约车"]
+        ]
+        return facts.allSatisfy { words in
+            !words.contains(where: { title.contains($0) }) || words.contains(where: { anchor.contains($0) })
+        }
+    }
+
     static func preparePool(
         category: HomeItem.Category, date: Date, history: [String], prefill: String?,
         calendar: Calendar = .current
@@ -447,7 +469,8 @@ enum RecordInputAssistanceComputation {
     }
 
     static func historySnapshot(
-        _ input: RecordInputHistoryPreparationInput
+        _ input: RecordInputHistoryPreparationInput,
+        includeQuickNoteHistory: Bool = true
     ) -> RecordInputHistorySnapshot {
         let calendar = Calendar.current
         let prefillStart = calendar.date(byAdding: .day, value: -180, to: input.now) ?? .distantPast
@@ -460,6 +483,7 @@ enum RecordInputAssistanceComputation {
             calendar: calendar
         )
         let titles = suggestions.reduce(into: [String: String]()) { result, suggestion in
+            guard !Task.isCancelled else { return }
             if let title = frequentHabitTitle(
                 items: input.items,
                 suggestion: suggestion,
@@ -475,7 +499,9 @@ enum RecordInputAssistanceComputation {
             prefillItems: prefillItems,
             frequentSuggestions: suggestions,
             frequentTitlesBySuggestionID: titles,
-            quickNoteTitlesByContext: RecordQuickNotePolicy.historicalTitles(items: input.items, at: input.referenceDate)
+            quickNoteTitlesByContext: includeQuickNoteHistory && !Task.isCancelled
+                ? RecordQuickNotePolicy.historicalTitles(items: input.items, at: input.referenceDate)
+                : [:]
         )
     }
 
@@ -600,12 +626,13 @@ enum RecordInputAssistanceComputation {
         let recentItems = items.filter { item in
             item.amount > 0 && item.createdAt >= start && item.createdAt <= date
         }
-        guard recentItems.count >= 6 else { return [] }
+        guard !Task.isCancelled, recentItems.count >= 6 else { return [] }
 
         let targetBucket = hourHabitBucket(for: date, calendar: calendar)
         let targetDayKind = RecordCalendarContext.dayKind(for: date)
         let contextItems = recentItems.filter { item in
-            hourHabitBucket(for: item.createdAt, calendar: calendar) == targetBucket
+            !Task.isCancelled
+                && hourHabitBucket(for: item.createdAt, calendar: calendar) == targetBucket
                 && RecordCalendarContext.dayKind(for: item.createdAt) == targetDayKind
         }
         guard contextItems.count >= 3 else { return [] }
@@ -614,6 +641,7 @@ enum RecordInputAssistanceComputation {
             Int((item.amount * 100).rounded())
         }
         let candidates: [RecordFrequentAmountSuggestion] = grouped.compactMap { entry in
+            guard !Task.isCancelled else { return nil }
             let group = entry.value
             let latestDate = group.map(\.createdAt).max() ?? .distantPast
             guard let category = frequentCategory(in: group) else { return nil }
@@ -649,14 +677,16 @@ enum RecordInputAssistanceComputation {
     ) -> String? {
         let start = calendar.date(byAdding: .day, value: -180, to: date) ?? .distantPast
         let amountCents = Int((amount * 100).rounded())
+        let targetBucket = hourHabitBucket(for: date, calendar: calendar)
+        let targetDayKind = RecordCalendarContext.dayKind(for: date)
         let supportItems = items.filter { item in
-            item.amount > 0
+            !Task.isCancelled && item.amount > 0
                 && item.createdAt >= start
                 && item.createdAt <= date
                 && item.category == suggestion.category
                 && Int((item.amount * 100).rounded()) == amountCents
-                && hourHabitBucket(for: item.createdAt, calendar: calendar) == hourHabitBucket(for: date, calendar: calendar)
-                && RecordCalendarContext.dayKind(for: item.createdAt) == RecordCalendarContext.dayKind(for: date)
+                && hourHabitBucket(for: item.createdAt, calendar: calendar) == targetBucket
+                && RecordCalendarContext.dayKind(for: item.createdAt) == targetDayKind
         }
         guard supportItems.count >= 2 else { return nil }
 
@@ -1178,6 +1208,15 @@ final class HomeViewModel: ObservableObject {
     @Published var inputTitle: String = "" {
         didSet {
             guard inputTitle != oldValue else { return }
+            if !isApplyingRecordTitleEvent {
+                recordHandwrittenAnchor = nil
+                recordNoteIsHandwritten = false
+                if recordExplicitIntent.categorySource == .handwritten {
+                    recordExplicitIntent = RecordExplicitIntentState(
+                        category: selectedCategory, userSelectedCategory: categoryLockedByUser
+                    )
+                }
+            }
             if recordGeneratedNoteContext?.matches(title: inputTitle, category: selectedCategory) != true {
                 recordGeneratedNoteContext = nil
             }
@@ -1196,7 +1235,20 @@ final class HomeViewModel: ObservableObject {
     private var recordAmountInputGate = RecordAmountInputGate()
     private var recordAmountInputTask: Task<Void, Never>?
     @Published var selectedCategory: HomeItem.Category = .other
-    @Published private(set) var categoryLockedByUser: Bool = false
+    @Published private(set) var recordExplicitIntent = RecordExplicitIntentState(category: .other)
+    var categoryLockedByUser: Bool { recordExplicitIntent.categoryWasSelectedByUser }
+    @Published private(set) var recordHandwrittenAnchor: String?
+    private var recordNoteIsHandwritten = false
+    private var isApplyingRecordTitleEvent = false
+
+    var hasExplicitRecordCategoryDecision: Bool { recordExplicitIntent.preventsAutomaticCategoryChanges }
+    var hasHandwrittenRecordNote: Bool { recordHandwrittenAnchor?.isEmpty == false }
+    var isCurrentRecordNoteHandwritten: Bool { recordNoteIsHandwritten && hasHandwrittenRecordNote }
+    var hasCurrentHandwrittenCategoryConflict: Bool {
+        recordHandwrittenAnchor.map {
+            RecordExplicitIntentPolicy.hasCategoryConflict(note: $0, category: selectedCategory)
+        } ?? false
+    }
     @Published var selectedDate: Date = .now {
         didSet {
             guard selectedDate != oldValue else { return }
@@ -1309,6 +1361,11 @@ final class HomeViewModel: ObservableObject {
     private var recordInputHistoryPreparationKey: RecordInputHistoryKey?
     private var recordInputHistoryPreparationTask: Task<Void, Never>?
     private var recordInputHistoryRequestID = UUID()
+    private var recordQuickNoteHistoryKey: RecordInputHistoryKey?
+    private var recordQuickNoteHistoryInput: RecordInputHistoryPreparationInput?
+    private var recordQuickNoteHistoryPreparationKey: RecordInputHistoryKey?
+    private var recordQuickNoteHistoryPreparationTask: Task<Void, Never>?
+    private var recordQuickNoteHistoryRequestID = UUID()
     private var recordPrefillPreparationKey: RecordPrefillPreparationKey?
     private var recordPrefillPreparationTask: Task<Void, Never>?
     private var recordPrefillRequestID = UUID()
@@ -1433,6 +1490,7 @@ final class HomeViewModel: ObservableObject {
         guard let amount = Double(inputAmount.replacingOccurrences(of: ",", with: "")), amount > 0 else { return false }
         flushPendingRecordAmountInput()
         let wasEmpty = items.isEmpty
+        let userEditedTitle = userEditedTitle || isCurrentRecordNoteHandwritten
         let shouldLockCategory = categoryLockedForSave ?? categoryLockedByUser
         let noteResult = UserContentRiskService.shared.validateManualNote(inputTitle, allowEmpty: true)
         guard noteResult.isAllowed else {
@@ -1447,7 +1505,7 @@ final class HomeViewModel: ObservableObject {
         )
         let baseTitle = draft.baseTitle
         let resolution = draft.resolution
-        let automaticEmotionTag = memoryEnhancedEmotionTag(
+        let automaticEmotionTag = hasCurrentHandwrittenCategoryConflict ? "" : memoryEnhancedEmotionTag(
             title: resolution.title,
             category: resolution.category,
             amount: amount,
@@ -1504,9 +1562,12 @@ final class HomeViewModel: ObservableObject {
                 amount: amount, date: selectedDate,
                 merchantBrandId: MerchantBrandCatalog.matchBrand(in: baseTitle)?.id,
                 categoryLockedByUser: categoryLockedForSave,
-                userEditedTitle: userEditedTitle || titleWasIntentionallyBlank,
+                userEditedTitle: isCurrentRecordNoteHandwritten || userEditedTitle || titleWasIntentionallyBlank,
                 source: "manual", scenePackId: scenePackId,
-                generatedNoteContext: currentRecordGeneratedNoteContext
+                generatedNoteContext: currentRecordGeneratedNoteContext,
+                categoryIsSettled: hasExplicitRecordCategoryDecision,
+                preserveConfirmedTitle: hasHandwrittenRecordNote && !normalizedTitle.isEmpty,
+                manualNoteAnchor: recordHandwrittenAnchor
             )
         )
         return (baseTitle, resolution)
@@ -1515,9 +1576,10 @@ final class HomeViewModel: ObservableObject {
     func automaticRecordEmotionTag(
         for resolution: RecordDraftResolution, amount: Double, weatherCompanionEnabled: Bool
     ) -> String {
+        guard !hasCurrentHandwrittenCategoryConflict else { return "" }
         // The preview already owns the observed settings; do not decode persisted
         // settings on every SwiftUI body evaluation. Save still revalidates them.
-        RecordMemoryContextService.enhancedEmotionTag(
+        return RecordMemoryContextService.enhancedEmotionTag(
             input: RecordMemoryContextInput(
                 title: resolution.title, category: resolution.category,
                 amount: amount, date: selectedDate, baseEmotionTag: resolution.emotionTag,
@@ -2036,71 +2098,82 @@ final class HomeViewModel: ObservableObject {
     }
 
     @discardableResult
-    func updateItem(_ updated: HomeItem) -> Bool {
-        guard ensureLedgerWritesAllowed() else { return false }
+    func updateItem(_ updated: HomeItem, editIntent: RecordEditIntent? = nil) -> Bool {
         guard let idx = items.firstIndex(where: { $0.id == updated.id }) else { return false }
         let original = items[idx]
-        var resolved = updated
-        let titleResult = UserContentRiskService.shared.validateManualNote(updated.title, allowEmpty: false)
+        var candidate = updated
+        candidate.updatedAt = original.updatedAt
+        if let editIntent {
+            guard editIntent.baseline.id == original.id else { return false }
+            candidate = RecordEditPolicy.applying(updated, intent: editIntent, to: original)
+        }
+        // No new ledger revision, timestamp, analytics, playback or upload for a
+        // form that did not change this record. Also guards non-editor callers.
+        if candidate == original { return true }
+        guard ensureLedgerWritesAllowed() else { return false }
+        var resolved = candidate
+        let titleResult = UserContentRiskService.shared.validateManualNote(candidate.title, allowEmpty: false)
         guard titleResult.isAllowed else {
             recordInputMessage = titleResult.message
             return false
         }
         recordInputMessage = nil
-        let cleanTitle = titleResult.value
-        let matchedBrand = MerchantBrandCatalog.matchBrand(in: cleanTitle)
-        let brandId = matchedBrand?.id ?? updated.merchantBrandId
-        let categoryWasEdited = updated.category != original.category
-        let categoryOverridesBrand = brandCategory(for: brandId).map { updated.category != $0 } ?? false
-        let titleWasEdited = cleanTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-            != original.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let shouldTreatTitleAsUserEdited = resolved.userEditedTitle == true || titleWasEdited
-        let resolution = RecordDraftResolutionService.resolve(
-            RecordDraftResolutionInput(
-                rawTitle: cleanTitle,
-                fallbackCategory: updated.category,
+        if editIntent == nil {
+            let cleanTitle = titleResult.value
+            let matchedBrand = MerchantBrandCatalog.matchBrand(in: cleanTitle)
+            let brandId = matchedBrand?.id ?? updated.merchantBrandId
+            let categoryWasEdited = updated.category != original.category
+            let categoryOverridesBrand = brandCategory(for: brandId).map { updated.category != $0 } ?? false
+            let titleWasEdited = cleanTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                != original.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let shouldTreatTitleAsUserEdited = resolved.userEditedTitle == true || titleWasEdited
+            let resolution = RecordDraftResolutionService.resolve(
+                RecordDraftResolutionInput(
+                    rawTitle: cleanTitle,
+                    fallbackCategory: updated.category,
+                    amount: resolved.amount,
+                    date: resolved.createdAt,
+                    merchantBrandId: brandId,
+                    categoryLockedByUser: categoryWasEdited || categoryOverridesBrand,
+                    userEditedTitle: shouldTreatTitleAsUserEdited,
+                    source: "edit"
+                )
+            )
+            resolved.title = resolution.title
+            resolved.category = resolution.category
+            if resolved.memoryContext == nil,
+               Calendar.current.isDate(resolved.createdAt, inSameDayAs: original.createdAt) {
+                resolved.memoryContext = original.memoryContext
+            }
+            resolved.emotionTag = memoryEnhancedEmotionTag(
+                title: resolution.title,
+                category: resolution.category,
                 amount: resolved.amount,
                 date: resolved.createdAt,
-                merchantBrandId: brandId,
-                categoryLockedByUser: categoryWasEdited || categoryOverridesBrand,
-                userEditedTitle: shouldTreatTitleAsUserEdited,
-                source: "edit"
+                baseEmotionTag: resolution.emotionTag,
+                weatherOverride: storedWeatherSnapshot(from: resolved.memoryContext),
+                allowLiveWeather: false
             )
-        )
-        resolved.title = resolution.title
-        resolved.category = resolution.category
-        if resolved.memoryContext == nil,
-           Calendar.current.isDate(resolved.createdAt, inSameDayAs: original.createdAt) {
-            resolved.memoryContext = original.memoryContext
-        }
-        resolved.emotionTag = memoryEnhancedEmotionTag(
-            title: resolution.title,
-            category: resolution.category,
-            amount: resolved.amount,
-            date: resolved.createdAt,
-            baseEmotionTag: resolution.emotionTag,
-            weatherOverride: storedWeatherSnapshot(from: resolved.memoryContext),
-            allowLiveWeather: false
-        )
-        resolved.merchantBrandId = resolution.merchantBrandId
-        if resolved.userEditedTitle == true || titleWasEdited {
-            resolved.userEditedTitle = true
-        }
-        if original.userEditedCategory == true || categoryWasEdited {
-            resolved.userEditedCategory = true
-        }
-        if categoryWasEdited {
-            resolved.categoryCorrectionFrom = original.category
-            resolved.scenePackId = nil
-        } else if original.categoryCorrectionFrom != nil {
-            resolved.categoryCorrectionFrom = original.categoryCorrectionFrom
-        }
-        resolved = PhotoMemoryPromptPolicy.refreshedAutomaticAnchorMetadata(
-            original: original,
-            updated: resolved
-        )
-        if let trustedMomentTag = TrustedUserMomentNarrativePolicy.emotionTag(for: resolved) {
-            resolved.emotionTag = trustedMomentTag
+            resolved.merchantBrandId = resolution.merchantBrandId
+            if resolved.userEditedTitle == true || titleWasEdited {
+                resolved.userEditedTitle = true
+            }
+            if original.userEditedCategory == true || categoryWasEdited {
+                resolved.userEditedCategory = true
+            }
+            if categoryWasEdited {
+                resolved.categoryCorrectionFrom = original.category
+                resolved.scenePackId = nil
+            } else if original.categoryCorrectionFrom != nil {
+                resolved.categoryCorrectionFrom = original.categoryCorrectionFrom
+            }
+            resolved = PhotoMemoryPromptPolicy.refreshedAutomaticAnchorMetadata(
+                original: original,
+                updated: resolved
+            )
+            if let trustedMomentTag = TrustedUserMomentNarrativePolicy.emotionTag(for: resolved) {
+                resolved.emotionTag = trustedMomentTag
+            }
         }
         resolved.updatedAt = Date()
         items[idx] = resolved
@@ -2498,6 +2571,16 @@ final class HomeViewModel: ObservableObject {
         return report
     }
 
+    var hasCurrentRecordCategoryRecommendation: Bool {
+        guard !isRecordAmountInputPending,
+              let amount = Double(inputAmount.replacingOccurrences(of: ",", with: "")), amount > 0,
+              let recordPrefillAmount, amount == recordPrefillAmount,
+              let result = recordPrefillResult else { return false }
+        return RecordInputAssistanceComputation.canDescribeAdoptedRecommendation(
+            result, selectedCategory: selectedCategory
+        )
+    }
+
     var recordLearningHint: String? {
         let normalizedAmount = inputAmount.replacingOccurrences(of: ",", with: "")
         guard let amount = Double(normalizedAmount), amount > 0 else { return nil }
@@ -2592,6 +2675,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func recommendCategoryResult(for amountText: String) -> CategoryRecommendResult? {
+        guard !hasExplicitRecordCategoryDecision else { return nil }
         let normalizedAmount = amountText.replacingOccurrences(of: ",", with: "")
         guard let amount = Double(normalizedAmount), amount > 0 else { return nil }
         let noteResult = UserContentRiskService.shared.validateManualNote(inputTitle, allowEmpty: true)
@@ -2803,6 +2887,8 @@ final class HomeViewModel: ObservableObject {
 
         if recordInputHistorySnapshot?.key != historyKey {
             prepareRecordInputHistorySnapshot(key: historyKey, now: now)
+        } else {
+            prepareRecordQuickNoteHistorySnapshot(key: historyKey)
         }
 
         // History completion and title/focus observers must not bypass amount settling.
@@ -2813,7 +2899,7 @@ final class HomeViewModel: ObservableObject {
             invalidateRecordPrefillSnapshot()
             return
         }
-        guard !categoryLockedByUser else {
+        guard !categoryLockedByUser, !hasExplicitRecordCategoryDecision else {
             invalidateRecordPrefillSnapshot()
             return
         }
@@ -2839,12 +2925,16 @@ final class HomeViewModel: ObservableObject {
             referenceDate: selectedDate,
             referenceDateEditedByUser: selectedDateEditedByUser
         )
-        guard recordInputHistorySnapshot?.key != key else { return }
+        guard recordInputHistorySnapshot?.key != key else {
+            prepareRecordQuickNoteHistorySnapshot(key: key)
+            return
+        }
         prepareRecordInputHistorySnapshot(key: key, now: Date())
     }
 
     func cancelRecordInputAssistancePreparation() {
         cancelPendingRecordAmountInput()
+        cancelRecordQuickNoteHistoryPreparation()
         recordInputHistoryPreparationTask?.cancel()
         recordInputHistoryPreparationTask = nil
         recordInputHistoryPreparationKey = nil
@@ -2869,6 +2959,12 @@ final class HomeViewModel: ObservableObject {
         let requestID = recordInputHistoryRequestID
         recordInputHistoryPreparationKey = key
         recordWarmupSuggestions = []
+        cancelRecordQuickNoteHistoryPreparation()
+        recordQuickNoteHistoryKey = nil
+        recordQuickNotePoolCache = nil
+        if !recordQuickNoteTitlesByContext.isEmpty {
+            recordQuickNoteTitlesByContext = [:]
+        }
         invalidateRecordPrefillSnapshot()
 
         let input = RecordInputHistoryPreparationInput(
@@ -2877,6 +2973,7 @@ final class HomeViewModel: ObservableObject {
             referenceDate: selectedDate,
             now: now
         )
+        recordQuickNoteHistoryInput = input
         recordInputHistoryPreparationTask = Task { @MainActor in
             await Task.yield()
             guard !Task.isCancelled, recordInputHistoryRequestID == requestID else { return }
@@ -2886,7 +2983,7 @@ final class HomeViewModel: ObservableObject {
             ) { group in
                 group.addTask(priority: .utility) {
                     guard !Task.isCancelled else { return nil }
-                    return RecordInputAssistanceComputation.historySnapshot(input)
+                    return RecordInputAssistanceComputation.historySnapshot(input, includeQuickNoteHistory: false)
                 }
                 return await group.next() ?? nil
             }
@@ -2903,14 +3000,68 @@ final class HomeViewModel: ObservableObject {
             recordInputHistorySnapshot = snapshot
             recordInputHistoryPreparationKey = nil
             recordInputHistoryPreparationTask = nil
-            if recordQuickNoteTitlesByContext != snapshot.quickNoteTitlesByContext {
-                recordQuickNoteTitlesByContext = snapshot.quickNoteTitlesByContext
-            }
             if recordWarmupSuggestions != snapshot.frequentSuggestions {
                 recordWarmupSuggestions = snapshot.frequentSuggestions
             }
             refreshRecordPrefill()
         }
+    }
+
+    /// Optional quick-note history must not delay the category recommendation.
+    /// A cancelled view can resume this independently of an already-ready history snapshot.
+    private func prepareRecordQuickNoteHistorySnapshot(key: RecordInputHistoryKey) {
+        guard recordInputHistorySnapshot?.key == key,
+              let input = recordQuickNoteHistoryInput, input.key == key,
+              recordQuickNoteHistoryKey != key,
+              recordQuickNoteHistoryPreparationKey != key else { return }
+        cancelRecordQuickNoteHistoryPreparation()
+        let requestID = recordQuickNoteHistoryRequestID
+        recordQuickNoteHistoryPreparationKey = key
+        recordQuickNoteHistoryPreparationTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled, recordQuickNoteHistoryRequestID == requestID else { return }
+            let titles = await withTaskGroup(
+                of: [String: [String]]?.self,
+                returning: [String: [String]]?.self
+            ) { group in
+                group.addTask(priority: .utility) {
+                    guard !Task.isCancelled else { return nil }
+                    let result = RecordQuickNotePolicy.historicalTitles(items: input.items, at: input.referenceDate)
+                    return Task.isCancelled ? nil : result
+                }
+                return await group.next() ?? nil
+            }
+            guard !Task.isCancelled, recordQuickNoteHistoryRequestID == requestID else { return }
+            recordQuickNoteHistoryPreparationTask = nil
+            recordQuickNoteHistoryPreparationKey = nil
+            guard let titles,
+                  let history = recordInputHistorySnapshot, history.key == key,
+                  RecordInputAssistanceComputation.historyKey(
+                    ledgerRevision: recordInputAssistanceRevision,
+                    referenceDate: selectedDate,
+                    referenceDateEditedByUser: selectedDateEditedByUser
+                  ) == key else { return }
+            let snapshot = RecordInputHistorySnapshot(
+                key: history.key,
+                prefillItems: history.prefillItems,
+                frequentSuggestions: history.frequentSuggestions,
+                frequentTitlesBySuggestionID: history.frequentTitlesBySuggestionID,
+                quickNoteTitlesByContext: titles
+            )
+            recordInputHistorySnapshot = snapshot
+            recordQuickNoteHistoryKey = key
+            recordQuickNoteHistoryInput = nil
+            if recordQuickNoteTitlesByContext != snapshot.quickNoteTitlesByContext {
+                recordQuickNoteTitlesByContext = snapshot.quickNoteTitlesByContext
+            }
+        }
+    }
+
+    private func cancelRecordQuickNoteHistoryPreparation() {
+        recordQuickNoteHistoryPreparationTask?.cancel()
+        recordQuickNoteHistoryPreparationTask = nil
+        recordQuickNoteHistoryPreparationKey = nil
+        recordQuickNoteHistoryRequestID = UUID()
     }
 
     private func prepareRecordPrefillSnapshot(
@@ -2982,6 +3133,7 @@ final class HomeViewModel: ObservableObject {
                   !Task.isCancelled,
                   recordPrefillRequestID == requestID,
                   !categoryLockedByUser,
+                  !hasExplicitRecordCategoryDecision,
                   recordInputHistorySnapshot?.key == history.key else {
                 return
             }
@@ -2998,7 +3150,8 @@ final class HomeViewModel: ObservableObject {
             referenceDate: selectedDate,
             referenceDateEditedByUser: selectedDateEditedByUser
         )
-        guard recordPrefillPreparationKey == snapshot.key,
+        guard !hasExplicitRecordCategoryDecision,
+              recordPrefillPreparationKey == snapshot.key,
               RecordInputAssistanceComputation.matchesCurrentDraft(
                 snapshot.key,
                 historyKey: historyKey,
@@ -3068,7 +3221,7 @@ final class HomeViewModel: ObservableObject {
             applyRecommendedCategory(category)
             return
         }
-        guard !categoryLockedByUser,
+        guard !categoryLockedByUser, !hasExplicitRecordCategoryDecision,
               let lastAutoRecommendedCategory,
               selectedCategory == lastAutoRecommendedCategory else {
             return
@@ -3092,6 +3245,9 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func invalidateRecordInputHistorySnapshot() {
+        cancelRecordQuickNoteHistoryPreparation()
+        recordQuickNoteHistoryKey = nil
+        recordQuickNoteHistoryInput = nil
         recordInputHistoryPreparationTask?.cancel()
         recordInputHistoryPreparationTask = nil
         recordInputHistoryPreparationKey = nil
@@ -3137,16 +3293,35 @@ final class HomeViewModel: ObservableObject {
     func selectCategory(_ category: HomeItem.Category) {
         flushPendingRecordAmountInput()
         rememberCategoryCorrectionIfNeeded(to: category)
-        recordGeneratedNoteContext = nil
+        let wasGenerated = isCurrentRecordNoteGenerated
+        recordExplicitIntent.selectCategory(category)
         selectedCategory = category
-        categoryLockedByUser = true
+        // A category click is not handwriting; keep generated provenance too.
+        recordGeneratedNoteContext = wasGenerated
+            ? RecordGeneratedNoteContext(title: inputTitle, category: category) : nil
         invalidateRecordPrefillSnapshot()
     }
 
-    func preferNoteSemanticsForCurrentDraft() {
-        guard categoryLockedByUser || pendingCategoryCorrectionFrom != nil else { return }
-        categoryLockedByUser = false
-        pendingCategoryCorrectionFrom = nil
+    /// Called only from a committed text-input event, never from an observer.
+    func applyUserRecordTitle(_ title: String) {
+        let committedTitle = String(title.prefix(32))
+        guard committedTitle != inputTitle else { return }
+        isApplyingRecordTitleEvent = true
+        defer { isApplyingRecordTitleEvent = false }
+        recordExplicitIntent.adoptAutomaticCategory(selectedCategory)
+        recordGeneratedNoteContext = nil
+        recordNoteIsHandwritten = !committedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        recordHandwrittenAnchor = recordNoteIsHandwritten ? committedTitle : nil
+        let meaningChanged = committedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            != inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        inputTitle = committedTitle
+        let validation = UserContentRiskService.shared.validateManualNote(committedTitle, allowEmpty: true)
+        if meaningChanged, validation.isAllowed, let category = recordExplicitIntent.writeNote(validation.value) {
+            selectedCategory = category
+            pendingCategoryCorrectionFrom = nil
+            lastAutoRecommendedCategory = nil
+        }
+        invalidateRecordPrefillSnapshot()
     }
 
     var isCurrentRecordNoteGenerated: Bool {
@@ -3157,19 +3332,34 @@ final class HomeViewModel: ObservableObject {
         isCurrentRecordNoteGenerated ? recordGeneratedNoteContext : nil
     }
 
-    func applyGeneratedRecordTitle(_ title: String) {
+    func applyGeneratedRecordTitle(_ title: String, preservingHandwrittenAnchor: Bool = false) {
+        isApplyingRecordTitleEvent = true
+        defer { isApplyingRecordTitleEvent = false }
         let category = selectedCategory
         let normalizedTitle = UserContentRiskService.shared.normalizedManualNote(title)
+        if !preservingHandwrittenAnchor { recordHandwrittenAnchor = nil }
+        recordNoteIsHandwritten = false
         inputTitle = normalizedTitle
         recordGeneratedNoteContext = RecordGeneratedNoteContext(title: normalizedTitle, category: category)
+        invalidateRecordPrefillSnapshot()
+    }
+
+    /// Undo an expression change without replaying the original note as new intent.
+    func restoreHandwrittenRecordTitle() {
+        guard let anchor = recordHandwrittenAnchor else { return }
+        isApplyingRecordTitleEvent = true
+        defer { isApplyingRecordTitleEvent = false }
+        recordGeneratedNoteContext = nil
+        recordNoteIsHandwritten = true
+        inputTitle = anchor
         invalidateRecordPrefillSnapshot()
     }
 
     func applyScenePackDraft(title: String, category: HomeItem.Category) {
         flushPendingRecordAmountInput()
         rememberCategoryCorrectionIfNeeded(to: category)
+        recordExplicitIntent.selectCategory(category)
         selectedCategory = category
-        categoryLockedByUser = true
         applyGeneratedRecordTitle(title)
         recordInputMessage = nil
     }
@@ -3177,19 +3367,22 @@ final class HomeViewModel: ObservableObject {
     func applyScenePackCategory(_ category: HomeItem.Category) {
         flushPendingRecordAmountInput()
         rememberCategoryCorrectionIfNeeded(to: category)
-        recordGeneratedNoteContext = nil
+        let wasGenerated = isCurrentRecordNoteGenerated
+        recordExplicitIntent.selectCategory(category)
         selectedCategory = category
-        categoryLockedByUser = true
+        recordGeneratedNoteContext = wasGenerated
+            ? RecordGeneratedNoteContext(title: inputTitle, category: category) : nil
         invalidateRecordPrefillSnapshot()
         recordInputMessage = nil
     }
 
     func applyRecommendedCategory(_ category: HomeItem.Category) {
-        guard !categoryLockedByUser else { return }
+        guard !categoryLockedByUser, !hasExplicitRecordCategoryDecision else { return }
         if category != selectedCategory {
             recordGeneratedNoteContext = nil
         }
         selectedCategory = category
+        recordExplicitIntent.adoptAutomaticCategory(category)
         lastAutoRecommendedCategory = category
     }
 
@@ -3214,6 +3407,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func noteSuggestions(for category: HomeItem.Category, at date: Date = .now) -> [String] {
+        guard !hasCurrentHandwrittenCategoryConflict else { return [] }
         let key = RecordInputAssistanceComputation.historyKey(
             ledgerRevision: recordInputAssistanceRevision, referenceDate: date,
             referenceDateEditedByUser: selectedDateEditedByUser
@@ -3231,7 +3425,9 @@ final class HomeViewModel: ObservableObject {
             ))
         }
         guard let pool = recordQuickNotePoolCache?.pool else { return [] }
-        return RecordQuickNotePolicy.suggestions(pool: pool, anchor: inputTitle)
+        let suggestions = RecordQuickNotePolicy.suggestions(pool: pool, anchor: inputTitle)
+        guard let anchor = recordHandwrittenAnchor else { return suggestions }
+        return suggestions.filter { RecordQuickNotePolicy.respectsHandwrittenAnchor($0, anchor: anchor) }
     }
 
     func frequentRecordAmounts(at date: Date = .now) -> [Double] {
@@ -3767,12 +3963,14 @@ final class HomeViewModel: ObservableObject {
 
     private func resetInput() {
         recordGeneratedNoteContext = nil
+        recordHandwrittenAnchor = nil
+        recordNoteIsHandwritten = false
+        recordExplicitIntent = RecordExplicitIntentState(category: .other)
         inputTitle = ""
         inputAmount = ""
         selectedDate = .now
         selectedDateEditedByUser = false
         selectedCategory = .other
-        categoryLockedByUser = false
         invalidateRecordPrefillSnapshot()
         lastAutoRecommendedCategory = nil
         pendingCategoryCorrectionFrom = nil

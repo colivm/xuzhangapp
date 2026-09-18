@@ -2194,8 +2194,8 @@ struct HomeView: View {
             if let item = todayInlineEditingItem {
                 FocusedRecordEditor(
                     item: item,
-                    onSave: { updated in
-                        let didSave = homeViewModel.updateItem(updated)
+                    onSave: { updated, intent in
+                        let didSave = homeViewModel.updateItem(updated, editIntent: intent)
                         if didSave {
                             highlightSavedItem(updated.id)
                             withAnimation(todayEditSpring) {
@@ -2916,8 +2916,8 @@ struct HomeView: View {
     }
 
     private func editSheet(for item: HomeItem) -> some View {
-        RecordEditSheet(item: item) { updated in
-            let didSave = homeViewModel.updateItem(updated)
+        RecordEditSheet(item: item) { updated, intent in
+            let didSave = homeViewModel.updateItem(updated, editIntent: intent)
             if didSave {
                 highlightSavedItem(updated.id)
                 editingItem = nil

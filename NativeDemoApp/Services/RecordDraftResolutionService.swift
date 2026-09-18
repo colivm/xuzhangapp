@@ -1,5 +1,87 @@
 import Foundation
 
+/// Shared by new records and both editors. Only committed user events advance
+/// this state; generated text, loading a record and asynchronous hints do not.
+struct RecordExplicitIntentState: Equatable {
+    enum CategorySource: Equatable { case automatic, userSelection, handwritten }
+    private(set) var category: HomeItem.Category
+    private(set) var categorySource: CategorySource
+    private(set) var revision: UInt64 = 0
+    private(set) var categorySelectionRevision: UInt64?
+    private(set) var handwrittenRevision: UInt64?
+
+    init(category: HomeItem.Category, userSelectedCategory: Bool = false) {
+        self.category = category
+        categorySource = userSelectedCategory ? .userSelection : .automatic
+    }
+
+    var categoryWasSelectedByUser: Bool { categorySource == .userSelection }
+    var preventsAutomaticCategoryChanges: Bool { categorySource != .automatic }
+
+    mutating func selectCategory(_ category: HomeItem.Category) {
+        revision &+= 1
+        categorySelectionRevision = revision
+        self.category = category
+        categorySource = .userSelection
+    }
+
+    @discardableResult
+    mutating func writeNote(_ text: String) -> HomeItem.Category? {
+        revision &+= 1
+        handwrittenRevision = revision
+        guard let category = RecordExplicitIntentPolicy.category(for: text) else { return nil }
+        self.category = category
+        categorySource = .handwritten
+        return category
+    }
+
+    mutating func adoptAutomaticCategory(_ category: HomeItem.Category) {
+        guard !preventsAutomaticCategoryChanges else { return }
+        self.category = category
+    }
+}
+
+enum RecordExplicitIntentPolicy {
+    /// Reuse existing factual vocabulary without changing the global classifier.
+    /// Ambiguous categories cannot overturn a prior explicit decision. Contained
+    /// words (咖啡 in 咖啡器具, 手机 in 手机话费) are not independent evidence.
+    static func category(for text: String) -> HomeItem.Category? {
+        let note = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !note.isEmpty, note != RecordSemanticLexicon.emptyNoteTitle else { return nil }
+        let hits = RecordSemanticLexicon.keywordRules.flatMap { rule in
+            rule.keywords.compactMap { keyword -> (word: String, category: HomeItem.Category, score: Double)? in
+                let word = keyword.lowercased()
+                guard word.count > 1, note.contains(word) else { return nil }
+                return (word, rule.category, rule.score)
+            }
+        }
+        let specific = hits.filter { hit in
+            let longer = hits.filter { $0.word != hit.word && $0.word.contains(hit.word) }
+            let residual = longer.reduce(note) { $0.replacingOccurrences(of: $1.word, with: "") }
+            return residual.contains(hit.word)
+        }
+        var categories = Set(specific.filter { $0.score >= 3 }.map(\.category))
+        if let strong = RecordSemanticLexicon.strongManualNoteCategory(of: note) {
+            // Strong rules remain useful for phrases whose global score is lower.
+            // A contained short word must not defeat a more specific phrase.
+            if categories.isEmpty || categories.contains(strong) { categories.insert(strong) }
+        }
+        if SemanticBoundaryGuard.familyCareKind(in: note) != nil { categories.insert(.daily) }
+        if let brand = MerchantBrandCatalog.matchBrand(in: note) {
+            if !MerchantBrandCatalog.isConvenienceStoreBrand(brand) || categories.isEmpty {
+                categories.insert(brand.category)
+            }
+        }
+        guard categories.count == 1 else { return nil }
+        return categories.first
+    }
+
+    static func hasCategoryConflict(note: String, category: HomeItem.Category) -> Bool {
+        guard let meaning = self.category(for: note) else { return false }
+        return meaning != category
+    }
+}
+
 /// Monotonic request identity, not an amount comparison (1 -> 12 -> 1 is new input).
 struct RecordAmountInputGate {
     static let delayNanoseconds: UInt64 = 180_000_000
@@ -80,6 +162,9 @@ struct RecordDraftResolutionInput {
     let source: String
     var scenePackId: String? = nil
     var generatedNoteContext: RecordGeneratedNoteContext? = nil
+    var categoryIsSettled: Bool = false
+    var preserveConfirmedTitle: Bool = false
+    var manualNoteAnchor: String? = nil
 }
 
 /// Ephemeral identity only: changing expression is not a category or scene-pack edit.
@@ -210,7 +295,7 @@ enum RecordEmotionScenePolicy {
     }
 }
 
-/// Record-only fallback for known dining facts, not a classifier or auto-copy rule.
+/// Record-only fallback for known scene facts, not a classifier or auto-copy rule.
 /// A source is selected once from semantics, never from complete note templates.
 enum RecordEmotionCandidateSource {
     private enum Scene: Equatable {
@@ -240,6 +325,9 @@ enum RecordEmotionCandidateSource {
     }
 
     static func alternatives(for context: RecordEmotionSceneContext) -> [String] {
+        if context.category == .transport {
+            return lateCommuteAlternatives(for: context)
+        }
         guard context.category == .dining,
               !context.previewEmotionTag.isEmpty,
               context.previewEmotionTag == context.automaticEmotionTag,
@@ -256,6 +344,33 @@ enum RecordEmotionCandidateSource {
             guard !RecordSemanticLexicon.matchingEmotionRuleIDs(in: context.previewEmotionTag).contains("meal") else { return [] }
         }
         return scene.alternatives
+    }
+
+    private static func lateCommuteAlternatives(for context: RecordEmotionSceneContext) -> [String] {
+        let canonical = "晚上这段通勤"
+        guard context.merchantBrandID == nil,
+              context.scenePackID == nil || context.scenePackID == "commute",
+              context.previewEmotionTag == canonical,
+              context.automaticEmotionTag == canonical else { return [] }
+
+        // Reuse the existing time/commute resolver, but only supplement a plain,
+        // explicit commute. Do not invent work, weather, or a transport method.
+        func isSameScene(_ text: String) -> Bool {
+            let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard text.contains("通勤"),
+                  MerchantBrandCatalog.matchBrand(in: text) == nil,
+                  RecordSemanticLexicon.matchingEmotionRuleIDs(in: text).isSubset(of: ["transport"]),
+                  !["上班", "下班", "早班", "到岗", "早高峰", "晚高峰", "加班", "工作", "公司", "单位", "工位",
+                    "雨天", "下雨", "雨中", "雪天", "下雪", "雪中", "高温", "低温", "冷天", "热天"]
+                    .contains(where: { text.contains($0) }) else { return false }
+            return HomeItem.refinedEmotionTag(
+                title: text, category: context.category, amount: context.amount, date: context.date
+            ) == canonical
+        }
+
+        let anchor = context.semanticAnchor?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard isSameScene(context.title), anchor.isEmpty || isSameScene(anchor) else { return [] }
+        return ["晚间这段通勤", "这趟晚间通勤记下", "晚上的通勤记一笔"]
     }
 
     private static func scene(in text: String) -> Scene? {
@@ -314,13 +429,16 @@ enum RecordDraftResolutionService {
                 && semanticCategory != brand.category
         } ?? false
         let suppressBrand = input.categoryLockedByUser || semanticOverridesConvenienceBrand ||
-            (keepsGeneratedCategory && brand?.category != input.fallbackCategory)
+            ((keepsGeneratedCategory || input.categoryIsSettled) && brand?.category != input.fallbackCategory)
         let brandId = suppressBrand ? nil : brand?.id
 
         let category: HomeItem.Category
         if input.categoryLockedByUser {
             category = input.fallbackCategory
             trace.append("category:userLocked")
+        } else if input.categoryIsSettled {
+            category = input.fallbackCategory
+            trace.append("category:explicitIntent")
         } else if keepsGeneratedCategory {
             category = input.fallbackCategory
             trace.append("category:generatedDraft")
@@ -347,7 +465,7 @@ enum RecordDraftResolutionService {
         let shouldKeepUserTitle = input.userEditedTitle
             && !initialTitle.isEmpty
             && initialTitle != RecordSemanticLexicon.emptyNoteTitle
-        let title = shouldKeepUserTitle || (keepsGeneratedCategory && !input.categoryLockedByUser)
+        let title = shouldKeepUserTitle || input.preserveConfirmedTitle || (keepsGeneratedCategory && !input.categoryLockedByUser)
             ? initialTitle
             : shouldPreserveBrandTitle
                 ? resolvedTitle
@@ -372,9 +490,14 @@ enum RecordDraftResolutionService {
                 scenePackId: input.scenePackId
             )
         )
-        let emotionTag = RecordSemanticLexicon.isTitle(resolvedEmotionTag, compatibleWith: category)
-            ? resolvedEmotionTag
-            : HomeItem.inferEmotionTag(category: category, amount: input.amount)
+        let hasManualConflict = input.manualNoteAnchor.map {
+            RecordExplicitIntentPolicy.hasCategoryConflict(note: $0, category: category)
+        } ?? false
+        let emotionTag = hasManualConflict ? "" : (
+            RecordSemanticLexicon.isTitle(resolvedEmotionTag, compatibleWith: category)
+                ? resolvedEmotionTag
+                : HomeItem.inferEmotionTag(category: category, amount: input.amount)
+        )
 
         return RecordDraftResolution(
             category: category,

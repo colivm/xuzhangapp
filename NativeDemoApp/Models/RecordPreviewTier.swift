@@ -5,6 +5,15 @@ enum RecordPreviewTier: Equatable {
     case whisper
     case confirm
 
+    /// Category confidence is independent of whether the user asked for copy.
+    func showsCategory(hasResolvedCategory: Bool) -> Bool {
+        switch self {
+        case .hidden: return false
+        case .whisper: return hasResolvedCategory
+        case .confirm: return true
+        }
+    }
+
     struct Input {
         let amount: Double
         let itemsCount: Int
