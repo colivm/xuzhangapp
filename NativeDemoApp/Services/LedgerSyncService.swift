@@ -3,12 +3,13 @@ import Foundation
 enum LedgerSyncError: LocalizedError {
     case invalidBaseURL
     case badStatus(Int, String)
+    case invalidAcknowledgement
 
     var errorDescription: String? {
         switch self {
         case .invalidBaseURL:
             return "同步设置暂时不可用，请稍后再试。"
-        case .badStatus:
+        case .badStatus, .invalidAcknowledgement:
             return "同步没有完成，请稍后再试。你的本机记录已保留。"
         }
     }
@@ -30,6 +31,55 @@ private struct LedgerDTO: Codable {
     let categoryCorrectionFrom: String?
     let memoryContext: LedgerMemoryContextDTO?
     let scenePackId: String?
+}
+
+enum CloudNetworkFailureGuidance {
+    static func message(for error: Error) -> String? {
+        let error = error as NSError
+        guard error.domain == NSURLErrorDomain else { return nil }
+        switch URLError.Code(rawValue: error.code) {
+        case .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff,
+             .networkConnectionLost, .timedOut, .cannotConnectToHost,
+             .cannotFindHost, .dnsLookupFailed:
+            return "暂时无法连接网络。请检查网络；若已禁止叙账联网，请在系统设置中允许访问无线局域网与蜂窝网络。"
+        default:
+            return nil
+        }
+    }
+}
+
+/// A batch is complete only when every required mutation was acknowledged.
+/// Keep processing other records after a recoverable failure without hiding it.
+struct LedgerSyncAttemptOutcome {
+    private(set) var failedUploads = 0
+    private(set) var failedDeletions = 0
+    private(set) var needsNetworkHelp = false
+
+    var isComplete: Bool { failedUploads == 0 && failedDeletions == 0 }
+
+    mutating func recordUploadFailure(_ error: Error) {
+        failedUploads += 1
+        needsNetworkHelp = needsNetworkHelp || CloudNetworkFailureGuidance.message(for: error) != nil
+    }
+
+    mutating func recordDeletionFailure(_ error: Error) {
+        failedDeletions += 1
+        needsNetworkHelp = needsNetworkHelp || CloudNetworkFailureGuidance.message(for: error) != nil
+    }
+
+    var message: String {
+        if isComplete {
+            return "自动备份已完成；照片仍保存在本机。重复记录已保留最新版本。"
+        }
+        let retry = needsNetworkHelp
+            ? "请检查网络和系统设置中的联网权限后重试。"
+            : "请稍后重试。"
+        return "备份尚未完成，有记录或删除操作未同步。\(retry)本机记录已保留。"
+    }
+}
+
+private struct LedgerAcknowledgement: Decodable {
+    let ok: Bool
 }
 
 private struct LedgerDraftMetaDTO: Codable {
@@ -181,7 +231,9 @@ final class LedgerSyncService {
         guard let url = URL(string: baseURL + path) else {
             throw LedgerSyncError.invalidBaseURL
         }
-        var request = URLRequest(url: url)
+        // A previous GET response cannot prove that this attempt reached the server.
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
@@ -194,6 +246,10 @@ final class LedgerSyncService {
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
         guard (200..<300).contains(statusCode) else {
             throw LedgerSyncError.badStatus(statusCode, body)
+        }
+        guard let acknowledgement = try? JSONDecoder().decode(LedgerAcknowledgement.self, from: data),
+              acknowledgement.ok else {
+            throw LedgerSyncError.invalidAcknowledgement
         }
         return (data, body)
     }

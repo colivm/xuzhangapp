@@ -97,6 +97,9 @@ enum SettingsBackupSummaryPolicy {
 struct SettingsView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @EnvironmentObject private var homeViewModel: HomeViewModel
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
+    @ObservedObject private var weatherService = WeatherCompanionService.shared
     @Binding var showMemberPricing: Bool
     @Binding var pricingHighlightPlanId: String?
     @Binding var pricingEntryContext: MemberPricingEntryContext
@@ -249,6 +252,7 @@ struct SettingsView: View {
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
         .onAppear {
+            weatherService.refreshLocationAuthorizationState()
             scheduleAccountMemoryStatsRefresh()
             draftDisplayName = settingsViewModel.displayName
             draftPetNickname = settingsViewModel.petNickname
@@ -262,6 +266,9 @@ struct SettingsView: View {
                     await homeViewModel.syncCloudLedgerNow()
                 }
             }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { weatherService.refreshLocationAuthorizationState() }
         }
         .onChange(of: settingsViewModel.hasCloudSession) { _, hasSession in
             guard hasSession else { return }
@@ -627,7 +634,9 @@ struct SettingsView: View {
             settingsFeatureTile(
                 title: "云端备份",
                 subtitle: backupRowSummary,
-                systemImage: settingsViewModel.syncEnabled ? "checkmark.shield" : "icloud",
+                systemImage: settingsViewModel.syncEnabled && homeViewModel.syncHasPendingFailures
+                    ? "exclamationmark.icloud"
+                    : (settingsViewModel.syncEnabled ? "checkmark.shield" : "icloud"),
                 style: settingsViewModel.syncEnabled ? .solid : .mint
             ) {
                 activeSettingsSheet = .backup
@@ -806,7 +815,9 @@ struct SettingsView: View {
     }
 
     private var backupRowSummary: String {
-        SettingsBackupSummaryPolicy.summary(
+        if settingsViewModel.syncEnabled && homeViewModel.isSyncingCloudLedger { return "正在备份" }
+        if settingsViewModel.syncEnabled && homeViewModel.syncHasPendingFailures { return "备份尚未完成" }
+        return SettingsBackupSummaryPolicy.summary(
             syncEnabled: settingsViewModel.syncEnabled,
             remoteOrganizationEnabled: settingsViewModel.useRemoteAI
         )
@@ -816,7 +827,8 @@ struct SettingsView: View {
         if homeViewModel.isSyncingCloudLedger {
             return "正在合并云端与本机记录；照片不会上传。"
         }
-        if let message = homeViewModel.syncStatusMessage, !message.isEmpty {
+        if settingsViewModel.syncEnabled,
+           let message = homeViewModel.syncStatusMessage, !message.isEmpty {
             return message
         }
         if settingsViewModel.syncEnabled {
@@ -1734,7 +1746,7 @@ struct SettingsView: View {
                 get: { settingsViewModel.weatherCompanionEnabled },
                 set: { settingsViewModel.weatherCompanionEnabled = $0 }
             ))
-            settingHelper("开启后，宠物会结合当天的天气生成更贴近情境的互动；关闭后仍保留基础陪伴。")
+            weatherPermissionHelper
             WeatherKitAttributionView()
         case .privacy:
             sectionBody("默认本地存储，无需登录即可完整使用。开启自动备份后，金额、分类、备注和日期会自动备份；照片仍保存在本机。会员状态随账号同步。")
@@ -1853,7 +1865,7 @@ struct SettingsView: View {
                 get: { settingsViewModel.weatherCompanionEnabled },
                 set: { settingsViewModel.weatherCompanionEnabled = $0 }
             ))
-            settingHelper("开启这个，我就能知道今天是晴是雨，陪你说更懂你的悄悄话啦！")
+            weatherPermissionHelper
             WeatherKitAttributionView()
         }
         .webCardPadding()
@@ -3395,9 +3407,59 @@ struct SettingsView: View {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .stroke(settingsInkAccent.opacity(0.12), lineWidth: 1)
                 )
+                if settingsViewModel.syncEnabled && homeViewModel.syncHasPendingFailures {
+                    HStack {
+                        Button("重试备份") {
+                            Task { await homeViewModel.syncCloudLedgerNow() }
+                        }
+                        .frame(minHeight: 44)
+                        if homeViewModel.syncNeedsNetworkHelp {
+                            Button("打开系统设置", action: openAppSystemSettings)
+                                .frame(minHeight: 44)
+                        }
+                    }
+                    .font(.system(size: 13, weight: .medium))
+                    .buttonStyle(.plain)
+                    .foregroundStyle(AppColors.accent)
+                }
             }
         }
         .padding(.top, -4)
+    }
+
+    private func openAppSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        openURL(url)
+    }
+
+    private var weatherPermissionHelper: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            settingHelper("天气互动为可选功能。开启后，定位用于获取当地天气和城市，为陪伴与记录补充场景；不授权也能正常记账。")
+            if settingsViewModel.weatherCompanionEnabled {
+                switch weatherService.locationAccessState {
+                case .notRequested:
+                    Button("允许定位以使用天气互动") {
+                        weatherService.requestWhenInUseAndRefresh()
+                    }
+                    .frame(minHeight: 44)
+                case .denied:
+                    settingHelper("定位未获允许，当前使用基础陪伴。可在系统设置中允许使用 App 期间定位。")
+                    Button("打开系统设置", action: openAppSystemSettings)
+                        .frame(minHeight: 44)
+                case .restricted:
+                    settingHelper("此设备的定位访问受到限制，天气互动暂不可用，记账不受影响。")
+                case .unavailable:
+                    settingHelper("系统定位服务已关闭，天气互动暂不可用，记账不受影响。")
+                    Button("打开系统设置", action: openAppSystemSettings)
+                        .frame(minHeight: 44)
+                case .allowed:
+                    settingHelper("定位已允许；天气不可用时仍保留基础陪伴。")
+                }
+            }
+        }
+        .font(.system(size: 12))
+        .buttonStyle(.plain)
+        .foregroundStyle(AppColors.accent)
     }
 
     private func webButton(_ title: String, action: @escaping () -> Void) -> some View {

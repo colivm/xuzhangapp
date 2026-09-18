@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 import Observation
 import XCTest
 import SwiftUI
@@ -9,6 +10,400 @@ import UIKit
 import WeatherKit
 #endif
 @testable import NativeDemoApp
+
+/// Each fixture owns a distinct host and a locked response queue. Tests never use live networking.
+private final class LedgerSyncTestURLProtocol: URLProtocol {
+    enum Response {
+        case http(Int, String)
+        case failure(URLError.Code)
+    }
+
+    private final class Registry: @unchecked Sendable {
+        private struct Entry {
+            var responses: [Response]
+            var requests: [URLRequest] = []
+        }
+
+        private let lock = NSLock()
+        private var entries: [String: Entry] = [:]
+
+        func register(host: String, responses: [Response]) {
+            lock.lock()
+            defer { lock.unlock() }
+            entries[host] = Entry(responses: responses)
+        }
+
+        func consume(_ request: URLRequest) -> Response {
+            lock.lock()
+            defer { lock.unlock() }
+            guard let host = request.url?.host, var entry = entries[host] else {
+                return .failure(.unsupportedURL)
+            }
+            entry.requests.append(request)
+            let response: Response = entry.responses.isEmpty
+                ? .failure(.badServerResponse) : entry.responses.removeFirst()
+            entries[host] = entry
+            return response
+        }
+
+        func requests(host: String) -> [URLRequest] {
+            lock.lock()
+            defer { lock.unlock() }
+            return entries[host]?.requests ?? []
+        }
+
+        func remove(host: String) {
+            lock.lock()
+            defer { lock.unlock() }
+            entries.removeValue(forKey: host)
+        }
+    }
+
+    private static let registry = Registry()
+
+    static func register(host: String, responses: [Response]) {
+        registry.register(host: host, responses: responses)
+    }
+
+    static func requests(host: String) -> [URLRequest] { registry.requests(host: host) }
+    static func remove(host: String) { registry.remove(host: host) }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        switch Self.registry.consume(request) {
+        case let .failure(code):
+            client?.urlProtocol(self, didFailWithError: URLError(code))
+        case let .http(status, body):
+            guard let url = request.url,
+                  let response = HTTPURLResponse(
+                    url: url, statusCode: status, httpVersion: "HTTP/1.1",
+                    headerFields: ["Content-Type": "application/json"]
+                  ) else {
+                client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+                return
+            }
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data(body.utf8))
+            client?.urlProtocolDidFinishLoading(self)
+        }
+    }
+
+    override func stopLoading() {}
+}
+
+private final class LedgerSyncTransportFixture {
+    let host: String
+    let cache: URLCache
+    let session: URLSession
+    let service: LedgerSyncService
+
+    var baseURL: String { "https://" + host }
+    var requests: [URLRequest] { LedgerSyncTestURLProtocol.requests(host: host) }
+
+    init(_ responses: [LedgerSyncTestURLProtocol.Response]) {
+        let host = UUID().uuidString.lowercased() + "-ledger-sync-test.invalid"
+        let cache = URLCache(memoryCapacity: 1_048_576, diskCapacity: 0, diskPath: nil)
+        self.host = host
+        self.cache = cache
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [LedgerSyncTestURLProtocol.self]
+        configuration.urlCache = cache
+        configuration.requestCachePolicy = .useProtocolCachePolicy
+        let session = URLSession(configuration: configuration)
+        self.session = session
+        service = LedgerSyncService(baseURL: "https://" + host, accessToken: "test-token", urlSession: session)
+        LedgerSyncTestURLProtocol.register(host: host, responses: responses)
+    }
+
+    func close() {
+        session.invalidateAndCancel()
+        cache.removeAllCachedResponses()
+        LedgerSyncTestURLProtocol.remove(host: host)
+    }
+}
+
+final class LedgerSyncPermissionRegressionTests: XCTestCase {
+    private let item = HomeItem(title: "本机夜宵", amount: 32, category: .dining)
+    private let emptySnapshot = #"{"ok":true,"items":[],"tombstones":[]}"#
+
+    func testFreshAcknowledgedFetchUploadAndDeletionSucceedWithoutCache() async throws {
+        let fixture = LedgerSyncTransportFixture([
+            .http(200, emptySnapshot), .http(201, #"{"ok":true}"#), .http(200, #"{"ok":true}"#)
+        ])
+        defer { fixture.close() }
+        let snapshot = try await fixture.service.fetchSnapshot()
+        XCTAssertTrue(snapshot.items.isEmpty)
+        XCTAssertTrue(snapshot.tombstones.isEmpty)
+        try await fixture.service.upload(item)
+        try await fixture.service.delete(id: item.id)
+        let requests = fixture.requests
+        XCTAssertEqual(requests.map(\.httpMethod), ["GET", "POST", "DELETE"])
+        XCTAssertEqual(requests.map { $0.url?.path }, ["/v1/ledger", "/v1/ledger", "/v1/ledger/\(item.id.uuidString)"])
+        for request in requests {
+            XCTAssertEqual(request.cachePolicy, .reloadIgnoringLocalCacheData)
+            XCTAssertEqual(request.timeoutInterval, 30)
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Cache-Control"), "no-cache")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
+        }
+    }
+
+    func testOfflineFetchCannotUsePreviouslyCachedSuccess() async throws {
+        let fixture = LedgerSyncTransportFixture([.failure(.notConnectedToInternet)])
+        defer { fixture.close() }
+        let url = try XCTUnwrap(URL(string: fixture.baseURL + "/v1/ledger"))
+        var cachedRequest = URLRequest(url: url)
+        cachedRequest.setValue("Bearer test-token", forHTTPHeaderField: "Authorization")
+        cachedRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let response = try XCTUnwrap(HTTPURLResponse(
+            url: url, statusCode: 200, httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json", "Cache-Control": "max-age=3600"]
+        ))
+        fixture.cache.storeCachedResponse(
+            CachedURLResponse(response: response, data: Data(emptySnapshot.utf8)), for: cachedRequest
+        )
+        XCTAssertNotNil(fixture.cache.cachedResponse(for: cachedRequest))
+        do {
+            _ = try await fixture.service.fetchSnapshot()
+            XCTFail("A cached acknowledgement must not prove that an offline attempt succeeded")
+        } catch {
+            XCTAssertEqual((error as NSError).domain, NSURLErrorDomain)
+            XCTAssertEqual((error as NSError).code, URLError.notConnectedToInternet.rawValue)
+        }
+        XCTAssertEqual(fixture.requests.count, 1)
+        XCTAssertEqual(fixture.requests.first?.cachePolicy, .reloadIgnoringLocalCacheData)
+    }
+
+    func testCellularDataDeniedAndLostConnectionPropagateForMutations() async {
+        let fixture = LedgerSyncTransportFixture([.failure(.dataNotAllowed), .failure(.networkConnectionLost)])
+        defer { fixture.close() }
+        do {
+            try await fixture.service.upload(item)
+            XCTFail("A denied upload must remain pending")
+        } catch {
+            XCTAssertEqual((error as NSError).domain, NSURLErrorDomain)
+            XCTAssertEqual((error as NSError).code, URLError.dataNotAllowed.rawValue)
+        }
+        do {
+            try await fixture.service.delete(id: item.id)
+            XCTFail("An unacknowledged deletion must remain pending")
+        } catch {
+            XCTAssertEqual((error as NSError).domain, NSURLErrorDomain)
+            XCTAssertEqual((error as NSError).code, URLError.networkConnectionLost.rawValue)
+        }
+        XCTAssertEqual(fixture.requests.count, 2)
+    }
+
+    func testFalseAcknowledgementRejectsFetchUploadAndDeletion() async {
+        await assertInvalidAcknowledgement(body: #"{"ok":false,"items":[],"tombstones":[]}"#)
+    }
+
+    func testMalformedOrMissingAcknowledgementRejectsEveryOperation() async {
+        for body in ["", "not JSON", "{}", #"{"ok":"true"}"#] {
+            await assertInvalidAcknowledgement(body: body)
+        }
+        await assertInvalidAcknowledgement(body: "", status: 204)
+    }
+
+    func testAcknowledgedButMalformedSnapshotCannotBecomeEmptySuccess() async {
+        let fixture = LedgerSyncTransportFixture([.http(200, #"{"ok":true}"#)])
+        defer { fixture.close() }
+        do {
+            _ = try await fixture.service.fetchSnapshot()
+            XCTFail("Missing records are not an acknowledged empty snapshot")
+        } catch {
+            XCTAssertTrue(error is DecodingError)
+        }
+    }
+
+    func testUnauthorizedResponsePreservesStatusForLoginHandling() async {
+        let body = #"{"error":"token_expired"}"#
+        let fixture = LedgerSyncTransportFixture(Array(repeating: .http(401, body), count: 3))
+        defer { fixture.close() }
+        for operation in 0..<3 {
+            do {
+                try await perform(operation, service: fixture.service)
+                XCTFail("HTTP 401 must not report success")
+            } catch LedgerSyncError.badStatus(let status, let receivedBody) {
+                XCTAssertEqual(status, 401)
+                XCTAssertEqual(receivedBody, body)
+            } catch {
+                XCTFail("Unauthorized status was lost: \(error)")
+            }
+        }
+    }
+
+    func testMixedBatchFailuresRemainVisibleAndFreshSuccessfulRetryClearsOutcome() async {
+        let fixture = LedgerSyncTransportFixture([
+            .http(200, #"{"ok":true}"#), .failure(.dataNotAllowed),
+            .http(200, #"{"ok":false}"#), .http(200, #"{"ok":true}"#),
+            .http(200, #"{"ok":true}"#), .http(200, #"{"ok":true}"#),
+            .http(200, #"{"ok":true}"#), .http(200, #"{"ok":true}"#)
+        ])
+        defer { fixture.close() }
+        var attempt = LedgerSyncAttemptOutcome()
+        for _ in 0..<2 {
+            do { try await fixture.service.upload(item) }
+            catch { attempt.recordUploadFailure(error) }
+        }
+        for _ in 0..<2 {
+            do { try await fixture.service.delete(id: item.id) }
+            catch { attempt.recordDeletionFailure(error) }
+        }
+        XCTAssertFalse(attempt.isComplete)
+        XCTAssertEqual(attempt.failedUploads, 1)
+        XCTAssertEqual(attempt.failedDeletions, 1)
+        XCTAssertTrue(attempt.needsNetworkHelp)
+        XCTAssertTrue(attempt.message.contains("尚未完成"))
+        XCTAssertTrue(attempt.message.contains("本机记录已保留"))
+
+        var retry = LedgerSyncAttemptOutcome()
+        for _ in 0..<2 {
+            do { try await fixture.service.upload(item) }
+            catch { retry.recordUploadFailure(error) }
+        }
+        for _ in 0..<2 {
+            do { try await fixture.service.delete(id: item.id) }
+            catch { retry.recordDeletionFailure(error) }
+        }
+        XCTAssertTrue(retry.isComplete)
+        XCTAssertEqual(retry.failedUploads, 0)
+        XCTAssertEqual(retry.failedDeletions, 0)
+        XCTAssertFalse(retry.needsNetworkHelp)
+        XCTAssertTrue(retry.message.contains("已完成"))
+        XCTAssertEqual(fixture.requests.count, 8)
+    }
+
+    func testNetworkGuidanceIsConditionalAndCoversCellularFailure() throws {
+        let codes: [URLError.Code] = [
+            .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff,
+            .networkConnectionLost, .timedOut, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed
+        ]
+        for code in codes {
+            let message = try XCTUnwrap(CloudNetworkFailureGuidance.message(for: URLError(code)))
+            XCTAssertTrue(message.contains("请检查网络"))
+            XCTAssertTrue(message.contains("若已禁止"), "An error alone cannot establish denied permission")
+            XCTAssertTrue(message.contains("无线局域网与蜂窝网络"))
+        }
+    }
+
+    func testCancellationAndNonNetworkFailuresDoNotAccuseNetworkPermission() {
+        let errors: [Error] = [
+            URLError(.cancelled), URLError(.badURL), CancellationError(),
+            LedgerSyncError.invalidAcknowledgement, LedgerSyncError.badStatus(401, "expired"),
+            NSError(domain: "ServerValidation", code: URLError.dataNotAllowed.rawValue)
+        ]
+        for error in errors {
+            XCTAssertNil(CloudNetworkFailureGuidance.message(for: error))
+        }
+        var attempt = LedgerSyncAttemptOutcome()
+        attempt.recordUploadFailure(LedgerSyncError.invalidAcknowledgement)
+        attempt.recordDeletionFailure(LedgerSyncError.badStatus(503, "unavailable"))
+        XCTAssertFalse(attempt.isComplete)
+        XCTAssertFalse(attempt.needsNetworkHelp)
+        XCTAssertFalse(attempt.message.contains("联网权限"))
+    }
+
+    private func perform(_ operation: Int, service: LedgerSyncService) async throws {
+        switch operation {
+        case 0: _ = try await service.fetchSnapshot()
+        case 1: try await service.upload(item)
+        default: try await service.delete(id: item.id)
+        }
+    }
+
+    private func assertInvalidAcknowledgement(body: String, status: Int = 200) async {
+        let fixture = LedgerSyncTransportFixture(Array(repeating: .http(status, body), count: 3))
+        defer { fixture.close() }
+        for operation in 0..<3 {
+            do {
+                try await perform(operation, service: fixture.service)
+                XCTFail("An unacknowledged response must not report success: \(body)")
+            } catch LedgerSyncError.invalidAcknowledgement {
+                // Expected for all operations, including otherwise successful HTTP statuses.
+            } catch {
+                XCTFail("Unexpected acknowledgement error: \(error)")
+            }
+        }
+        XCTAssertEqual(fixture.requests.count, 3)
+    }
+}
+
+final class WeatherPermissionRegressionTests: XCTestCase {
+    func testNewSettingsDoNotEnableOptionalWeatherLocation() {
+        XCTAssertFalse(AppSettings.default.weatherCompanionEnabled)
+    }
+
+    func testOldSettingsWithoutWeatherKeyDoNotOptInToLocation() throws {
+        let settings = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"displayName":"旧用户"}"#.utf8))
+        XCTAssertFalse(settings.weatherCompanionEnabled)
+        XCTAssertEqual(settings.displayName, "旧用户")
+    }
+
+    func testExplicitExistingWeatherChoiceSurvivesDecoding() throws {
+        for enabled in [true, false] {
+            var settings = AppSettings.default
+            settings.weatherCompanionEnabled = enabled
+            let reopened = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+            XCTAssertEqual(reopened.weatherCompanionEnabled, enabled)
+        }
+    }
+
+    func testWeatherAccessDistinguishesUndecidedDeniedRestrictedAndDisabledServices() {
+        let cases: [(CLAuthorizationStatus, WeatherLocationAccessState)] = [
+            (.notDetermined, .notRequested), (.denied, .denied), (.restricted, .restricted),
+            (.authorizedWhenInUse, .allowed), (.authorizedAlways, .allowed)
+        ]
+        for (status, expected) in cases {
+            XCTAssertEqual(WeatherLocationAccessPolicy.accessState(
+                locationServicesEnabled: true, authorizationStatus: status
+            ), expected)
+            XCTAssertEqual(WeatherLocationAccessPolicy.accessState(
+                locationServicesEnabled: false, authorizationStatus: status
+            ), .unavailable)
+        }
+    }
+
+    func testWeatherRequiresBothExplicitFeatureChoiceAndCurrentLocationAccess() {
+        let statuses: [CLAuthorizationStatus] = [
+            .notDetermined, .denied, .restricted, .authorizedWhenInUse, .authorizedAlways
+        ]
+        for enabled in [false, true] {
+            for servicesEnabled in [false, true] {
+                for status in statuses {
+                    XCTAssertEqual(WeatherLocationAccessPolicy.canUseWeather(
+                        weatherEnabled: enabled, locationServicesEnabled: servicesEnabled,
+                        authorizationStatus: status
+                    ), enabled && servicesEnabled && (status == .authorizedWhenInUse || status == .authorizedAlways))
+                }
+            }
+        }
+    }
+
+    func testLateWeatherResultsCannotReappearAfterDisablingOrRevokingAccess() {
+        XCTAssertTrue(WeatherLocationAccessPolicy.canAcceptResult(
+            requestRevision: 4, currentRevision: 4, weatherEnabled: true,
+            locationServicesEnabled: true, authorizationStatus: .authorizedWhenInUse
+        ))
+        XCTAssertFalse(WeatherLocationAccessPolicy.canAcceptResult(
+            requestRevision: 3, currentRevision: 4, weatherEnabled: true,
+            locationServicesEnabled: true, authorizationStatus: .authorizedWhenInUse
+        ))
+        XCTAssertFalse(WeatherLocationAccessPolicy.canAcceptResult(
+            requestRevision: 4, currentRevision: 4, weatherEnabled: false,
+            locationServicesEnabled: true, authorizationStatus: .authorizedWhenInUse
+        ))
+        XCTAssertFalse(WeatherLocationAccessPolicy.canAcceptResult(
+            requestRevision: 4, currentRevision: 4, weatherEnabled: true,
+            locationServicesEnabled: true, authorizationStatus: .denied
+        ))
+        XCTAssertFalse(WeatherLocationAccessPolicy.canAcceptResult(
+            requestRevision: 4, currentRevision: 4, weatherEnabled: true,
+            locationServicesEnabled: false, authorizationStatus: .authorizedAlways
+        ))
+    }
+}
 
 final class RecordContinuousIntentTests: XCTestCase {
     private let date = Date(timeIntervalSince1970: 1_800_000_000.125)

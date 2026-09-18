@@ -236,6 +236,7 @@ def run_repository_checks(branch: str | None = None) -> None:
         ("git diff --check", ["git", "diff", "--check"]),
         ("life semantic regression", [sys.executable, "scripts/life_semantic_regression.py"]),
         ("record continuous intent", [sys.executable, "scripts/record_continuous_intent_regression.py"]),
+        ("first-use permissions and sync", [sys.executable, "scripts/first_use_permissions_sync_regression.py"]),
         ("experience static check", powershell_command("scripts/experience_static_check.ps1")),
         ("copy experience check", powershell_command("scripts/check_copy_experience.ps1")),
         ("copy lint", [sys.executable, "scripts/copy_lint.py"]),

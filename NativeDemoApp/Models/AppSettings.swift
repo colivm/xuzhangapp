@@ -82,7 +82,7 @@ struct AppSettings: Codable, Equatable {
         syncEnabled: false,
         petCompanionEnabled: true,
         petNickname: "",
-        weatherCompanionEnabled: true,
+        weatherCompanionEnabled: false,
         aiTone: .gentle,
         useRemoteAI: false,
         remoteAIMonthlyLimit: 120,
@@ -125,7 +125,7 @@ extension AppSettings {
         syncEnabled = try container.decodeIfPresent(Bool.self, forKey: .syncEnabled) ?? false
         petCompanionEnabled = try container.decodeIfPresent(Bool.self, forKey: .petCompanionEnabled) ?? true
         petNickname = try container.decodeIfPresent(String.self, forKey: .petNickname) ?? ""
-        weatherCompanionEnabled = try container.decodeIfPresent(Bool.self, forKey: .weatherCompanionEnabled) ?? true
+        weatherCompanionEnabled = try container.decodeIfPresent(Bool.self, forKey: .weatherCompanionEnabled) ?? false
         aiTone = try container.decodeIfPresent(AITone.self, forKey: .aiTone) ?? .gentle
         useRemoteAI = try container.decodeIfPresent(Bool.self, forKey: .useRemoteAI) ?? false
         remoteAIMonthlyLimit = try container.decodeIfPresent(Int.self, forKey: .remoteAIMonthlyLimit) ?? 120

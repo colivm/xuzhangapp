@@ -188,10 +188,13 @@ final class SettingsViewModel: ObservableObject {
     var weatherCompanionEnabled: Bool {
         get { settings.weatherCompanionEnabled }
         set {
+            guard settings.weatherCompanionEnabled != newValue else { return }
             settings.weatherCompanionEnabled = newValue
             persist()
-            if newValue, settings.petCompanionEnabled {
-                WeatherCompanionService.shared.startBackgroundRefresh()
+            if newValue {
+                // This setter is reached by the explicit weather setting, not
+                // saving a record or enabling basic pet companionship.
+                WeatherCompanionService.shared.requestWhenInUseAndRefresh()
             } else {
                 WeatherCompanionService.shared.stopBackgroundRefresh()
             }
@@ -881,6 +884,9 @@ final class SettingsViewModel: ObservableObject {
     }
 
     private func sendSMSMessage(for error: Error) -> String {
+        if let message = CloudNetworkFailureGuidance.message(for: error) {
+            return "验证码未发送。\(message)"
+        }
         guard let serviceError = error as? AuthServiceError,
               case AuthServiceError.badStatus(let code, let body) = serviceError else {
             return "验证码暂时没发出去，请检查手机号或稍后再试。"
@@ -902,6 +908,9 @@ final class SettingsViewModel: ObservableObject {
     }
 
     private func verifySMSMessage(for error: Error) -> String {
+        if let message = CloudNetworkFailureGuidance.message(for: error) {
+            return "登录未完成。\(message)"
+        }
         guard let serviceError = error as? AuthServiceError,
               case AuthServiceError.badStatus(let code, let body) = serviceError else {
             return "登录没有成功，请检查手机号和验证码后再试。"

@@ -1274,6 +1274,8 @@ final class HomeViewModel: ObservableObject {
         }
     }
     @Published private(set) var syncStatusMessage: String?
+    @Published private(set) var syncNeedsNetworkHelp = false
+    @Published private(set) var syncHasPendingFailures = false
     @Published private(set) var isPersistingLedger: Bool = false
     @Published private(set) var isSyncingCloudLedger: Bool = false
     @Published private(set) var isRestoringLocalBackup: Bool = false
@@ -2339,8 +2341,12 @@ final class HomeViewModel: ObservableObject {
             return
         }
         isSyncingCloudLedger = true
+        syncNeedsNetworkHelp = false
+        syncHasPendingFailures = false
+        syncStatusMessage = nil
         defer { isSyncingCloudLedger = false }
         let service = LedgerSyncService(baseURL: context.baseURL, accessToken: context.accessToken)
+        var outcome = LedgerSyncAttemptOutcome()
         do {
             let pendingDeletes = LocalStore.loadCloudLedgerDeletionIntents(for: context.userId)
             for intent in pendingDeletes {
@@ -2348,7 +2354,10 @@ final class HomeViewModel: ObservableObject {
                     try await service.delete(id: intent.id, deletedAt: intent.deletedAt)
                     LocalStore.removeCloudLedgerDeletion(id: intent.id, for: context.userId)
                 } catch {
-                    guard CloudSessionFailurePolicy.shouldInvalidateSession(for: error) else { continue }
+                    guard CloudSessionFailurePolicy.shouldInvalidateSession(for: error) else {
+                        outcome.recordDeletionFailure(error)
+                        continue
+                    }
                     CloudSessionInvalidationService.invalidate()
                     syncStatusMessage = CloudSessionInvalidationService.userMessage
                     return
@@ -2367,6 +2376,7 @@ final class HomeViewModel: ObservableObject {
             let changes = ledgerChanges(from: items, to: merged)
             items = merged
             guard persistItems(upserting: changes.upserts, deleting: changes.deletedIDs) else {
+                syncHasPendingFailures = true
                 syncStatusMessage = "同步结果没有写入本机，原账本仍保留。请重启后再试。"
                 return
             }
@@ -2376,6 +2386,7 @@ final class HomeViewModel: ObservableObject {
             // leave the two stores observing different revisions.
             let persistedIDs = Set(changes.upserts.map(\.id)).union(changes.deletedIDs)
             guard await waitForPersistence(of: persistedIDs) else {
+                syncHasPendingFailures = true
                 syncStatusMessage = "同步结果没有写入本机，原账本仍保留。请重启后再试。"
                 return
             }
@@ -2387,6 +2398,7 @@ final class HomeViewModel: ObservableObject {
                     try await service.upload(item)
                 } catch {
                     guard CloudSessionFailurePolicy.shouldInvalidateSession(for: error) else {
+                        outcome.recordUploadFailure(error)
                         continue
                     }
                     CloudSessionInvalidationService.invalidate()
@@ -2397,13 +2409,27 @@ final class HomeViewModel: ObservableObject {
             if !mergeResult.deletedByRemote.isEmpty {
                 refreshTodayPlayback()
             }
-            syncStatusMessage = "自动备份已完成；照片仍保存在本机。重复记录已保留最新版本。"
+            // A concurrent automatic mutation may have failed while this batch
+            // was suspended. Its failure must not be replaced by batch success.
+            syncNeedsNetworkHelp = syncNeedsNetworkHelp || outcome.needsNetworkHelp
+            if !outcome.isComplete {
+                syncHasPendingFailures = true
+                syncStatusMessage = outcome.message
+            } else if syncHasPendingFailures {
+                syncStatusMessage = "备份尚未完成，有新的修改未同步。请检查网络后重试，本机记录已保留。"
+            } else {
+                syncStatusMessage = outcome.message
+            }
         } catch {
+            syncHasPendingFailures = true
             if CloudSessionFailurePolicy.shouldInvalidateSession(for: error) {
                 CloudSessionInvalidationService.invalidate()
                 syncStatusMessage = CloudSessionInvalidationService.userMessage
             } else {
-                syncStatusMessage = "同步没有完成，请稍后再试。你的本机记录已保留。"
+                syncNeedsNetworkHelp = CloudNetworkFailureGuidance.message(for: error) != nil
+                syncStatusMessage = CloudNetworkFailureGuidance.message(for: error)
+                    .map { "\($0)同步没有完成，本机记录已保留。" }
+                    ?? "同步没有完成，请稍后再试。你的本机记录已保留。"
             }
         }
     }
@@ -4263,16 +4289,26 @@ final class HomeViewModel: ObservableObject {
                 currentItemIDs: Set(items.lazy.map(\.id))
             ) {
                 try await service.delete(id: item.id)
-                syncStatusMessage = "云端备份已删除；本机照片不受影响。"
+                if !isSyncingCloudLedger && !syncHasPendingFailures {
+                    syncNeedsNetworkHelp = false
+                    syncStatusMessage = "这笔云端备份已删除；本机照片不受影响。"
+                }
                 return
             }
-            syncStatusMessage = "自动备份已完成；照片仍保存在本机。"
+            if !isSyncingCloudLedger && !syncHasPendingFailures {
+                syncNeedsNetworkHelp = false
+                syncStatusMessage = "这笔记录已备份；照片仍保存在本机。"
+            }
         } catch {
+            syncHasPendingFailures = true
             if CloudSessionFailurePolicy.shouldInvalidateSession(for: error) {
                 CloudSessionInvalidationService.invalidate()
                 syncStatusMessage = CloudSessionInvalidationService.userMessage
             } else {
-                syncStatusMessage = "这笔记录已保存在本机，云端暂时没同步成功。"
+                syncNeedsNetworkHelp = CloudNetworkFailureGuidance.message(for: error) != nil
+                syncStatusMessage = CloudNetworkFailureGuidance.message(for: error)
+                    .map { "\($0)这笔记录已保存在本机。" }
+                    ?? "这笔记录已保存在本机，云端暂时没同步成功。"
             }
         }
     }
@@ -4286,13 +4322,20 @@ final class HomeViewModel: ObservableObject {
         do {
             try await service.delete(id: id, deletedAt: intent?.deletedAt)
             LocalStore.removeCloudLedgerDeletion(id: id, for: context.userId)
-            syncStatusMessage = "云端备份已删除；本机照片不受影响。"
+            if !isSyncingCloudLedger && !syncHasPendingFailures {
+                syncNeedsNetworkHelp = false
+                syncStatusMessage = "这笔云端备份已删除；本机照片不受影响。"
+            }
         } catch {
+            syncHasPendingFailures = true
             if CloudSessionFailurePolicy.shouldInvalidateSession(for: error) {
                 CloudSessionInvalidationService.invalidate()
                 syncStatusMessage = CloudSessionInvalidationService.userMessage
             } else {
-                syncStatusMessage = "本机已更新，云端暂时没同步删除。"
+                syncNeedsNetworkHelp = CloudNetworkFailureGuidance.message(for: error) != nil
+                syncStatusMessage = CloudNetworkFailureGuidance.message(for: error)
+                    .map { "\($0)本机已更新，云端暂时没同步删除。" }
+                    ?? "本机已更新，云端暂时没同步删除。"
             }
         }
     }
