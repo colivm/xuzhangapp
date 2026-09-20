@@ -11230,6 +11230,11 @@ final class MembershipDetailPresentationPolicyTests: XCTestCase {
         XCTAssertFalse(policy.showsUnlockedSummary)
         XCTAssertFalse(policy.showsSubscriptionActions)
         XCTAssertFalse(policy.showsMemberDataBoundary)
+        XCTAssertFalse(policy.showsLifetimeUpgrade)
+        XCTAssertFalse(policy.showsLifetimeManagement)
+        for planID in ["monthly", "yearly", "lifetime"] {
+            XCTAssertTrue(policy.allowsPurchase(planID: planID))
+        }
     }
 
     func testSubscriptionSeesStatusUnlockedSummaryAndManagementWithoutSalesComparison() {
@@ -11246,6 +11251,11 @@ final class MembershipDetailPresentationPolicyTests: XCTestCase {
         XCTAssertTrue(policy.showsUnlockedSummary)
         XCTAssertTrue(policy.showsSubscriptionActions)
         XCTAssertTrue(policy.showsMemberDataBoundary)
+        XCTAssertTrue(policy.showsLifetimeUpgrade)
+        XCTAssertFalse(policy.showsLifetimeManagement)
+        XCTAssertTrue(policy.allowsPurchase(planID: "lifetime"))
+        XCTAssertFalse(policy.allowsPurchase(planID: "monthly"))
+        XCTAssertFalse(policy.allowsPurchase(planID: "yearly"))
     }
 
     func testLifetimeMemberGoesFromStatusToArchiveWithoutRepeatedValueCards() {
@@ -11262,6 +11272,11 @@ final class MembershipDetailPresentationPolicyTests: XCTestCase {
         XCTAssertFalse(policy.showsUnlockedSummary)
         XCTAssertFalse(policy.showsSubscriptionActions)
         XCTAssertTrue(policy.showsMemberDataBoundary)
+        XCTAssertFalse(policy.showsLifetimeUpgrade)
+        XCTAssertTrue(policy.showsLifetimeManagement)
+        for planID in ["monthly", "yearly", "lifetime"] {
+            XCTAssertFalse(policy.allowsPurchase(planID: planID))
+        }
     }
 }
 
@@ -11807,6 +11822,145 @@ final class CloudLedgerMergePolicyTests: XCTestCase {
         XCTAssertEqual(Set(result.merged.map(\.id)), [sameID, localNewerID, localOnlyID, remoteOnlyID])
         XCTAssertEqual(Set(result.uploads.map(\.id)), [localNewerID, localOnlyID])
         XCTAssertEqual(result.merged.first { $0.id == localNewerID }?.title, "local newer")
+    }
+}
+
+final class IAPEntitlementSelectionTests: XCTestCase {
+    private func payload(
+        _ transactionId: String,
+        tier: IAPTier,
+        expirationDate: Date? = nil
+    ) -> IAPPurchaseVerification {
+        IAPPurchaseVerification(
+            productId: "com.xuzhang.app.member.\(tier.rawValue)",
+            transactionId: transactionId,
+            signedTransactionInfo: "test-\(transactionId)",
+            tier: tier,
+            expirationDate: expirationDate
+        )
+    }
+
+    func testLifetimeRemainsFirstRegardlessOfSubscriptionExpiryOrInputOrder() {
+        let distantExpiry = Date(timeIntervalSince1970: 4_070_908_800)
+        let monthly = payload("monthly", tier: .monthly, expirationDate: distantExpiry)
+        let yearly = payload("yearly", tier: .yearly, expirationDate: distantExpiry)
+        let lifetime = payload("lifetime", tier: .lifetime)
+
+        for input in [
+            [monthly, yearly, lifetime],
+            [yearly, lifetime, monthly],
+            [lifetime, monthly, yearly],
+        ] {
+            XCTAssertEqual(
+                IAPEntitlementSelection.prioritized(input),
+                [lifetime, yearly, monthly]
+            )
+        }
+    }
+
+    func testMultipleCandidatesPreserveFallbacksAndStableTiesWithinEachTier() {
+        let earlier = Date(timeIntervalSince1970: 1_800_000_000)
+        let later = earlier.addingTimeInterval(86_400)
+        let yearlyEarly = payload("yearly-early", tier: .yearly, expirationDate: earlier)
+        let yearlyLate = payload("yearly-late", tier: .yearly, expirationDate: later)
+        let yearlyTied = payload("yearly-tied", tier: .yearly, expirationDate: later)
+        let yearlyUnknown = payload("yearly-unknown", tier: .yearly)
+        let monthly = payload("monthly", tier: .monthly, expirationDate: later)
+        let firstLifetime = payload("lifetime-first", tier: .lifetime)
+        let secondLifetime = payload("lifetime-second", tier: .lifetime)
+
+        XCTAssertEqual(
+            IAPEntitlementSelection.prioritized([
+                yearlyEarly, firstLifetime, yearlyLate, monthly,
+                secondLifetime, yearlyUnknown, yearlyTied,
+            ]),
+            [
+                firstLifetime, secondLifetime, yearlyLate, yearlyTied,
+                yearlyEarly, yearlyUnknown, monthly,
+            ]
+        )
+    }
+
+    func testEmptyEntitlementsHaveNoRestoreCandidate() {
+        XCTAssertTrue(IAPEntitlementSelection.prioritized([]).isEmpty)
+    }
+
+    @MainActor
+    func testRejectedLifetimeContinuesToTheCurrentAccountsSubscription() async {
+        let lifetime = payload("other-account-lifetime", tier: .lifetime)
+        let yearly = payload("current-account-yearly", tier: .yearly)
+        let monthly = payload("monthly", tier: .monthly)
+        var attempts: [String] = []
+
+        let result = await IAPEntitlementSelection.verifyFirstAvailable(in: [monthly, yearly, lifetime]) { candidate in
+            attempts.append(candidate.transactionId)
+            if candidate == lifetime {
+                throw AuthServiceError.iapVerifyFailed(code: "TRANSACTION_ALREADY_BOUND", message: "")
+            }
+        }
+
+        XCTAssertEqual(attempts, [lifetime.transactionId, yearly.transactionId])
+        XCTAssertEqual(result.verifiedPayload, yearly)
+        XCTAssertEqual(result.firstFailure?.tier, .lifetime)
+        guard let firstFailure = result.firstFailure else {
+            return XCTFail("The original account-binding rejection must remain available.")
+        }
+        XCTAssertTrue(IAPRestoreFailureCopy.message(for: firstFailure.error).contains("不能解绑或转移"))
+    }
+
+    @MainActor
+    func testSuccessfulLifetimeStopsBeforeAnySubscriptionVerification() async {
+        let lifetime = payload("lifetime", tier: .lifetime)
+        let yearly = payload("yearly", tier: .yearly)
+        var attempts: [String] = []
+
+        let result = await IAPEntitlementSelection.verifyFirstAvailable(in: [yearly, lifetime]) { candidate in
+            attempts.append(candidate.transactionId)
+        }
+
+        XCTAssertEqual(attempts, [lifetime.transactionId])
+        XCTAssertEqual(result.verifiedPayload, lifetime)
+        XCTAssertNil(result.firstFailure)
+    }
+
+    @MainActor
+    func testEveryRejectedCandidatePreservesTheFirstFailureAndNoSuccess() async {
+        let lifetime = payload("lifetime", tier: .lifetime)
+        let yearly = payload("yearly", tier: .yearly)
+        let monthly = payload("monthly", tier: .monthly)
+        var attempts: [String] = []
+
+        let result = await IAPEntitlementSelection.verifyFirstAvailable(in: [monthly, lifetime, yearly]) { candidate in
+            attempts.append(candidate.transactionId)
+            if candidate == lifetime {
+                throw AuthServiceError.iapVerifyFailed(code: "TRANSACTION_ALREADY_BOUND", message: "")
+            }
+            throw IAPServiceError.unverifiedTransaction
+        }
+
+        XCTAssertEqual(attempts, [lifetime.transactionId, yearly.transactionId, monthly.transactionId])
+        XCTAssertNil(result.verifiedPayload)
+        XCTAssertEqual(result.firstFailure?.tier, .lifetime)
+        guard let firstFailure = result.firstFailure else {
+            return XCTFail("All failures must retain the first verification error.")
+        }
+        XCTAssertTrue(IAPRestoreFailureCopy.message(for: firstFailure.error).contains("不能解绑或转移"))
+    }
+
+    @MainActor
+    func testCancellationStopsVerificationBeforeAnotherCandidate() async {
+        let lifetime = payload("lifetime", tier: .lifetime)
+        let yearly = payload("yearly", tier: .yearly)
+        var attempts: [String] = []
+
+        let result = await IAPEntitlementSelection.verifyFirstAvailable(in: [yearly, lifetime]) { candidate in
+            attempts.append(candidate.transactionId)
+            throw CancellationError()
+        }
+
+        XCTAssertEqual(attempts, [lifetime.transactionId])
+        XCTAssertNil(result.verifiedPayload)
+        XCTAssertNil(result.firstFailure)
     }
 }
 

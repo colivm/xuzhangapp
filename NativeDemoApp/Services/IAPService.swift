@@ -15,6 +15,60 @@ struct IAPPurchaseVerification: Equatable {
     let expirationDate: Date?
 }
 
+struct IAPEntitlementVerificationResult {
+    let verifiedPayload: IAPPurchaseVerification?
+    let firstFailure: (error: Error, tier: IAPTier)?
+}
+
+enum IAPEntitlementSelection {
+    static func prioritized(_ payloads: [IAPPurchaseVerification]) -> [IAPPurchaseVerification] {
+        payloads.enumerated().sorted { lhs, rhs in
+            let lhsPriority = tierPriority(lhs.element.tier)
+            let rhsPriority = tierPriority(rhs.element.tier)
+            if lhsPriority != rhsPriority {
+                return lhsPriority > rhsPriority
+            }
+            let lhsExpiry = lhs.element.expirationDate ?? .distantPast
+            let rhsExpiry = rhs.element.expirationDate ?? .distantPast
+            if lhsExpiry != rhsExpiry {
+                return lhsExpiry > rhsExpiry
+            }
+            return lhs.offset < rhs.offset
+        }.map { $0.element }
+    }
+
+    @MainActor
+    static func verifyFirstAvailable(
+        in payloads: [IAPPurchaseVerification],
+        verify: @MainActor (IAPPurchaseVerification) async throws -> Void
+    ) async -> IAPEntitlementVerificationResult {
+        var firstFailure: (error: Error, tier: IAPTier)?
+        for payload in prioritized(payloads) {
+            guard !Task.isCancelled else { break }
+            do {
+                try await verify(payload)
+                guard !Task.isCancelled else { break }
+                return IAPEntitlementVerificationResult(verifiedPayload: payload, firstFailure: firstFailure)
+            } catch is CancellationError {
+                break
+            } catch {
+                if firstFailure == nil {
+                    firstFailure = (error: error, tier: payload.tier)
+                }
+            }
+        }
+        return IAPEntitlementVerificationResult(verifiedPayload: nil, firstFailure: firstFailure)
+    }
+
+    private static func tierPriority(_ tier: IAPTier) -> Int {
+        switch tier {
+        case .lifetime: return 3
+        case .yearly: return 2
+        case .monthly: return 1
+        }
+    }
+}
+
 enum IAPServiceError: LocalizedError {
     case productNotConfigured
     case productNotFound

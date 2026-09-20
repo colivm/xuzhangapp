@@ -3029,13 +3029,13 @@ struct SettingsView: View {
                         openMemberPricingFromAccountSheet()
                     } label: {
                         HStack(spacing: 6) {
-                            Text("续费会员")
-                                .font(.system(size: 14, weight: .medium))
+                            Text("续费或升级")
+                                .font(.subheadline.weight(.medium))
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 10, weight: .bold))
                         }
                         .foregroundStyle(AppColors.accent.opacity(0.9))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                         .padding(.vertical, 4)
                     }
                     .buttonStyle(.plain)
@@ -3044,14 +3044,32 @@ struct SettingsView: View {
                         openMemberPricingFromAccountSheet()
                     } label: {
                         HStack(spacing: 6) {
-                            Text("查看完整生活档案包含")
-                                .font(.system(size: 14, weight: .medium))
+                            Text("会员详情")
+                                .font(.subheadline.weight(.medium))
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 10, weight: .bold))
                         }
                         .foregroundStyle(AppColors.accent.opacity(0.9))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                         .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if hasMemberAccess && !isLifetimeMember {
+                    Button {
+                        openMemberPricingFromAccountSheet(highlightPlanId: "lifetime")
+                    } label: {
+                        HStack(spacing: 8) {
+                            Label("升级永久会员", systemImage: "crown.fill")
+                                .font(.subheadline.weight(.semibold))
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .foregroundStyle(AppColors.accentDark)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     }
                     .buttonStyle(.plain)
                 }

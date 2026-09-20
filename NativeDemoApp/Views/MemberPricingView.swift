@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 
 // MARK: - Member Pricing View (matching web #accountMemberView)
 
@@ -34,7 +35,17 @@ struct MembershipDetailPresentationPolicy: Equatable {
     var showsMemberStatus: Bool { state != .prospect }
     var showsUnlockedSummary: Bool { state == .subscription }
     var showsSubscriptionActions: Bool { state == .subscription }
+    var showsLifetimeUpgrade: Bool { state == .subscription }
+    var showsLifetimeManagement: Bool { state == .lifetime }
     var showsMemberDataBoundary: Bool { state != .prospect }
+
+    func allowsPurchase(planID: String) -> Bool {
+        switch state {
+        case .prospect: return true
+        case .subscription: return planID == "lifetime"
+        case .lifetime: return false
+        }
+    }
 }
 
 struct MembershipValueDefinition: Identifiable, Equatable {
@@ -75,6 +86,10 @@ struct MemberPricingView: View {
     @State private var didApplyHighlight = false
     @State private var showMemberLoginSheet = false
     @State private var loginContinuation = MemberLoginContinuationState()
+    @State private var showLifetimePurchaseConfirmation = false
+    @State private var isLoadingProducts = false
+    @State private var didAttemptProductLoad = false
+    @State private var purchaseNoticeIncludesSubscriptionManagement = false
     private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
     private let privacyURL = URL(string: "https://xuzhangapp.com/legal/privacy.html")!
     private let manageSubscriptionsURL = URL(string: "https://apps.apple.com/account/subscriptions")!
@@ -121,6 +136,10 @@ struct MemberPricingView: View {
 
     private var isLifetimeMember: Bool {
         settingsViewModel.memberTier.lowercased() == "lifetime" && isMember
+    }
+
+    private var hasSubscriptionTier: Bool {
+        ["monthly", "yearly"].contains(settingsViewModel.memberTier.lowercased())
     }
 
     private var membershipPresentationPolicy: MembershipDetailPresentationPolicy {
@@ -244,14 +263,15 @@ struct MemberPricingView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
+                        if loginContinuation.resumedIntent != nil {
+                            memberLoginContinuationCard
+                        }
+
                         if membershipPresentationPolicy.showsSalesHero {
                             heroSection
                         }
 
                         if membershipPresentationPolicy.showsPricing {
-                            if loginContinuation.resumedIntent != nil {
-                                memberLoginContinuationCard
-                            }
                             pricingSection
                             lifetimeTeaserSection
                         }
@@ -262,6 +282,10 @@ struct MemberPricingView: View {
 
                         if membershipPresentationPolicy.showsUnlockedSummary {
                             memberUnlockedSummarySection
+                        }
+
+                        if membershipPresentationPolicy.showsLifetimeUpgrade {
+                            lifetimeUpgradeSection
                         }
 
                         if membershipPresentationPolicy.showsSubscriptionActions {
@@ -278,6 +302,10 @@ struct MemberPricingView: View {
                             lifetimeArchivePreparingSection
                         }
 
+                        if membershipPresentationPolicy.showsLifetimeManagement {
+                            lifetimeManagementSection
+                        }
+
                         if membershipPresentationPolicy.showsMemberDataBoundary {
                             memberDataBoundarySection
                             memberLegalFooter
@@ -292,10 +320,17 @@ struct MemberPricingView: View {
                 .scrollIndicators(.hidden)
                 .background(AppColors.bg.ignoresSafeArea())
                 .onAppear {
+                    if hasSubscriptionTier && !isMember {
+                        morePlansExpanded = true
+                    }
                     lifetimeArchiveStore.prepareIfNeeded(
                         revision: homeViewModel.homeDashboardRevision,
                         items: homeViewModel.items
                     )
+                    applyHighlightIfNeeded(proxy)
+                }
+                .onChange(of: membershipPresentationPolicy.state) { _, _ in
+                    didApplyHighlight = false
                     applyHighlightIfNeeded(proxy)
                 }
             }
@@ -352,6 +387,14 @@ struct MemberPricingView: View {
             guard hasSession else { return }
             handleMemberLoginSucceeded()
         }
+        .alert("开通永久会员", isPresented: $showLifetimePurchaseConfirmation) {
+            Button("继续购买") {
+                handlePurchase(plans[2], confirmsLifetimePurchase: true)
+            }
+            Button("取消", role: .cancel) { }
+        } message: {
+            Text("一次性支付 \(displayPrice(for: plans[2]))，购买成功后永久有效。如已有月度或年度订阅，购买永久会员不会自动取消原订阅，也不会自动抵扣或退款。购买成功后，请在 App Store 取消原订阅，避免继续扣费。")
+        }
     }
 
 
@@ -377,6 +420,9 @@ struct MemberPricingView: View {
                             .foregroundStyle(AppColors.text.opacity(0.76))
                             .lineSpacing(4)
                     }
+                }
+                if purchaseNoticeIncludesSubscriptionManagement {
+                    subscriptionManagementLink(title: "管理原有订阅")
                 }
                 Button("知道了") { purchaseNotice = nil }
                     .font(.system(size: 15, weight: .semibold))
@@ -623,23 +669,108 @@ struct MemberPricingView: View {
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(AppColors.text.opacity(0.9))
 
-            Link(destination: manageSubscriptionsURL) {
-                HStack {
-                    Label("在 App Store 管理订阅", systemImage: "arrow.up.right.square")
-                        .font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
-                }
-                .foregroundStyle(AppColors.text)
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .padding(.horizontal, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.white.opacity(0.58))
-                )
-            }
+            subscriptionManagementLink(title: "在 App Store 管理订阅")
 
+            Text("更改月度或年度方案、取消自动续费，均在 App Store 中操作。")
+                .font(.footnote)
+                .foregroundStyle(AppColors.subtext)
+                .fixedSize(horizontal: false, vertical: true)
+
+            restorePurchaseButton
+        }
+    }
+
+    private func subscriptionManagementLink(title: String) -> some View {
+        Link(destination: manageSubscriptionsURL) {
+            HStack(spacing: 10) {
+                Label(title, systemImage: "arrow.up.right.square")
+                    .font(.subheadline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(AppColors.text)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 4)
+            .background(AppColors.panelStrong.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+        }
+        .disabled(isPurchasing)
+    }
+
+    private var lifetimeUpgradeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Divider()
+            Label("升级永久会员", systemImage: "crown.fill")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppColors.text)
+            Text("一次开通，省力记和长期回望永久有效。")
+                .font(.subheadline)
+                .foregroundStyle(AppColors.subtext)
+                .fixedSize(horizontal: false, vertical: true)
+            lifetimeThemeBullet
+            lifetimePurchaseDisclosure
+            legalPurchaseNote
+
+            if let product = iapService.productsByTier[.lifetime] {
+                Button {
+                    handlePurchase(plans[2])
+                } label: {
+                    VStack(spacing: 4) {
+                        Label("升级永久会员", systemImage: "crown.fill")
+                            .font(.body.weight(.semibold))
+                        Text("\(product.displayPrice) · 一次性购买")
+                            .font(.subheadline)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .padding(.vertical, 10)
+                    .foregroundStyle(.white)
+                    .background(AppColors.accentDark, in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .disabled(isPurchasing)
+            } else if isLoadingProducts || !didAttemptProductLoad {
+                ProgressView("正在加载价格…")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            } else {
+                Text("暂时无法获取永久会员价格。")
+                    .font(.footnote)
+                    .foregroundStyle(AppColors.subtext)
+                Button {
+                    Task { await loadStoreProducts() }
+                } label: {
+                    Label("重新加载价格", systemImage: "arrow.clockwise")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .font(.body.weight(.medium))
+                .foregroundStyle(AppColors.accentDark)
+                .disabled(isPurchasing)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .id("member-plan-lifetime")
+        .accessibilityElement(children: .contain)
+    }
+
+    private var lifetimePurchaseDisclosure: some View {
+        Text("永久会员为独立的一次性购买。已有月度或年度订阅不会自动取消，购买成功后需在 App Store 手动取消，避免继续扣费；已付订阅费不会自动抵扣或退款。")
+            .font(.footnote)
+            .foregroundStyle(AppColors.subtext)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var lifetimeManagementSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("购买与订阅")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppColors.text)
+            Text("如曾开通月度或年度订阅，请检查并取消原订阅，避免继续扣费。取消原订阅不影响永久权益。")
+                .font(.footnote)
+                .foregroundStyle(AppColors.subtext)
+                .fixedSize(horizontal: false, vertical: true)
+            subscriptionManagementLink(title: "检查原有订阅")
             restorePurchaseButton
         }
     }
@@ -722,6 +853,11 @@ struct MemberPricingView: View {
 
     private var pricingSection: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if hasSubscriptionTier {
+                Text("续费或升级")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(AppColors.text)
+            }
             legalPurchaseNote
 
             // Featured yearly plan
@@ -752,6 +888,7 @@ struct MemberPricingView: View {
             if morePlansExpanded {
                 regularPlanButton(plans[1])
                 regularPlanButton(plans[2])
+                lifetimePurchaseDisclosure
             }
 
             restorePurchaseButton
@@ -780,7 +917,7 @@ struct MemberPricingView: View {
                     )
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("想长期保存记录？")
+                    Text("想一次开通永久会员？")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppColors.text.opacity(0.9))
                     Text("永久会员一次开通，含 3 款典藏风格。")
@@ -1215,7 +1352,7 @@ struct MemberPricingView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text("✦ 3 款永久典藏风格（档案馆 / 观察者 / 夜读）")
                 .foregroundStyle(Color(hex: "A68445"))
-            Text("随账号永久保留，年度会员不可用")
+            Text("随账号永久保留，月度和年度会员不含此项")
                 .foregroundStyle(AppColors.subtext)
         }
         .font(.footnote)
@@ -1223,7 +1360,7 @@ struct MemberPricingView: View {
     }
 
     private func applyHighlightIfNeeded(_ proxy: ScrollViewProxy) {
-        guard highlightPlanId == "lifetime", !didApplyHighlight else { return }
+        guard highlightPlanId == "lifetime", !isLifetimeMember, !didApplyHighlight else { return }
         didApplyHighlight = true
         morePlansExpanded = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
@@ -1269,6 +1406,7 @@ struct MemberPricingView: View {
     private func requestMemberLogin(for intent: MemberLoginContinuationIntent) {
         guard !isPurchasing else { return }
         purchaseNotice = nil
+        purchaseNoticeIncludesSubscriptionManagement = false
         loginContinuation.beginLogin(for: intent)
         settingsViewModel.clearAuthMessage()
         showMemberLoginSheet = true
@@ -1278,9 +1416,12 @@ struct MemberPricingView: View {
         guard loginContinuation.pendingLoginIntent != nil else { return }
         loginContinuation.loginSucceeded()
         showMemberLoginSheet = false
-        if isMember {
+        if case .purchase(let planID) = loginContinuation.resumedIntent,
+           !membershipPresentationPolicy.allowsPurchase(planID: planID) {
             loginContinuation.clearResumedIntent()
-            purchaseNotice = "已登录，当前账号的会员权益已经同步，不需要重复购买。"
+            purchaseNotice = isLifetimeMember
+                ? "已登录，当前账号已拥有永久会员，无需重复购买。"
+                : "已登录，当前订阅仍有效。如需更改月度或年度方案，请在 App Store 管理订阅。"
             return
         }
         if case .purchase(let planID) = loginContinuation.resumedIntent,
@@ -1305,18 +1446,37 @@ struct MemberPricingView: View {
         }
     }
 
-    private func handlePurchase(_ plan: MemberPlan) {
+    private func handlePurchase(_ plan: MemberPlan, confirmsLifetimePurchase: Bool = false) {
+        guard !isPurchasing else { return }
+        purchaseNoticeIncludesSubscriptionManagement = false
         guard settingsViewModel.hasCloudSession else {
             homeViewModel.markMemberPurchaseCompleted(plan: plan.id, outcome: .blocked)
             requestMemberLogin(for: .purchase(planID: plan.id))
             return
         }
         guard let tier = IAPTier(rawValue: plan.id) else { return }
+        guard membershipPresentationPolicy.allowsPurchase(planID: plan.id) else {
+            purchaseNotice = isLifetimeMember
+                ? "当前账号已拥有永久会员，无需重复购买。"
+                : "当前订阅仍有效，请在 App Store 更改月度或年度方案。"
+            return
+        }
+        if tier == .lifetime {
+            guard iapService.productsByTier[.lifetime] != nil else {
+                Task { await loadStoreProducts() }
+                return
+            }
+            if !confirmsLifetimePurchase {
+                showLifetimePurchaseConfirmation = true
+                return
+            }
+        }
         guard let appAccountToken = UUID(uuidString: settingsViewModel.cloudUserId) else {
             homeViewModel.markMemberPurchaseCompleted(plan: plan.id, outcome: .blocked)
             purchaseNotice = "当前账号状态异常，请重新登录手机号账号后再开通会员。"
             return
         }
+        loginContinuation.clearResumedIntent()
         isPurchasing = true
         Task {
             defer { isPurchasing = false }
@@ -1325,7 +1485,10 @@ struct MemberPricingView: View {
                 try await settingsViewModel.verifyIAPPurchase(payload)
                 await iapService.finish(transactionId: payload.transactionId)
                 homeViewModel.markMemberPurchaseCompleted(plan: plan.id, outcome: .success)
-                purchaseNotice = "会员已开通，回放和导入额度已更新。"
+                purchaseNoticeIncludesSubscriptionManagement = tier == .lifetime
+                purchaseNotice = tier == .lifetime
+                    ? "永久会员已开通。如曾订阅月度或年度会员，请前往 App Store 取消原订阅，避免继续扣费。"
+                    : "会员已开通，回放和导入额度已更新。"
             } catch {
                 homeViewModel.markMemberPurchaseCompleted(plan: plan.id, outcome: .failure)
                 purchaseNotice = IAPPurchaseFailureCopy.message(for: error, tier: tier)
@@ -1334,11 +1497,15 @@ struct MemberPricingView: View {
     }
 
     private func restorePurchases() {
+        guard !isPurchasing else { return }
+        purchaseNoticeIncludesSubscriptionManagement = false
         guard settingsViewModel.hasCloudSession else {
             homeViewModel.markMemberRestoreCompleted(outcome: .blocked)
             requestMemberLogin(for: .restorePurchases)
             return
         }
+        let accountIDAtStart = settingsViewModel.cloudUserId
+        loginContinuation.clearResumedIntent()
         isPurchasing = true
         Task {
             defer { isPurchasing = false }
@@ -1349,21 +1516,19 @@ struct MemberPricingView: View {
                     purchaseNotice = "暂时没有找到可恢复的购买记录。请确认已登录购买时绑定的手机号账号。"
                     return
                 }
-                var restoredPayload: IAPPurchaseVerification?
-                var firstVerifyFailure: (error: Error, tier: IAPTier)?
-                for payload in payloads {
-                    do {
-                        try await settingsViewModel.verifyIAPPurchase(payload)
-                        restoredPayload = payload
-                        break
-                    } catch {
-                        if firstVerifyFailure == nil {
-                            firstVerifyFailure = (error: error, tier: payload.tier)
-                        }
-                        continue
+                let result = await IAPEntitlementSelection.verifyFirstAvailable(in: payloads) { payload in
+                    guard settingsViewModel.hasCloudSession,
+                          settingsViewModel.cloudUserId == accountIDAtStart else {
+                        throw CancellationError()
                     }
+                    try await settingsViewModel.verifyIAPPurchase(payload)
                 }
-                guard let restoredPayload else {
+                guard !Task.isCancelled, settingsViewModel.hasCloudSession,
+                      settingsViewModel.cloudUserId == accountIDAtStart else {
+                    return
+                }
+                let firstVerifyFailure = result.firstFailure
+                guard let restoredPayload = result.verifiedPayload else {
                     homeViewModel.markMemberRestoreCompleted(outcome: .empty)
                     // 把服务端的真实原因（绑定到另一个账号、已过期等）透出来，不再一律说"没有可恢复的权益"。
                     purchaseNotice = IAPRestoreFailureCopy.message(
@@ -1374,7 +1539,10 @@ struct MemberPricingView: View {
                 }
                 await iapService.finish(transactionId: restoredPayload.transactionId)
                 homeViewModel.markMemberRestoreCompleted(outcome: .success)
-                purchaseNotice = "会员权益已恢复，可以继续使用。"
+                purchaseNoticeIncludesSubscriptionManagement = isLifetimeMember
+                purchaseNotice = isLifetimeMember
+                    ? "永久会员权益已恢复。如仍有月度或年度订阅，请在 App Store 取消，避免继续扣费。"
+                    : "会员权益已恢复，可以继续使用。"
             } catch {
                 homeViewModel.markMemberRestoreCompleted(outcome: .failure)
                 purchaseNotice = (error as? LocalizedError)?.errorDescription ?? "恢复购买没有完成，请稍后再试。"
@@ -1383,6 +1551,10 @@ struct MemberPricingView: View {
     }
 
     private func loadStoreProducts() async {
+        guard !isLoadingProducts else { return }
+        isLoadingProducts = true
+        didAttemptProductLoad = true
+        defer { isLoadingProducts = false }
         do {
             try await iapService.loadProducts()
         } catch {

@@ -5888,3 +5888,42 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 证书来源与保护：生产 `apple-root-ca-g2.cer` SHA-256 `C2B9B042DD57830E7D117DAC55AC8AE19407D38E41D88F3215BC3A890444A050`，G3 SHA-256 `63343ABFB89A6A03EBB57E9B3F5FA7BE7C4F5C756F3017B3A8C488C3653E9179`，均来自 Apple PKI；测试 leaf 私钥仅在 `scripts/fixtures/apple-jws-test/`，不进入生产部署包。`npm ci --ignore-scripts --no-audit --no-fund` 通过。
 - Windows staging release gate（`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging`）已完成并返回 `release_repository_gate: OK`，包含 fixtures、IAP environment gate、静态/体验检查和双配置边界检查。
 - 剩余风险与下一步：尚未在真实 Production/Sandbox server env 上运行验单；需先配置并审阅真实 `APPLE_APPLE_ID`、确认 cert 资源随包部署，再在 staging 和 production 隔离副本运行 backend gate 和真实沙盒恢复，之后才可部署。Production 401 原因仍是独立问题，JWS 验签修复不等于 Apple API JWT 授权已修复；Apple Root/库版本升级和 OCSP 策略另行审阅。本轮不部署或重启服务器。
+
+### 181. 会员续费与永久升级入口方案核对（2026-09-20）
+
+- 范围：用户询问订阅与永久权益不同的前提下，会员升级入口如何设计；本轮仅只读分析和方案记录，不进入实现，不改变路线任务状态。核对全局冻结边界、MEMBER-03、近期 IAP 记录及当前相关源码；没有完成全文逐段重读，不据此开始代码修改。
+- 证据：`MemberPricingView.swift` 的 `showsPricing` 仅向 prospect 开放，订阅态同时隐藏套餐和永久预览，只剩管理订阅/恢复；永久主题入口虽能传入 lifetime 高亮，目标购买项在订阅态不存在。`SettingsView.swift` 的有效会员入口主要通往档案，到期提供续费。`APP_STORE_IAP_SETUP.md` 规定月/年属于同一订阅组，永久为非消耗型商品；现有 `IAPService.purchase` 和会员页购买流程已支持 lifetime。
+- 建议：账号页有效月/年会员并列提供会员详情与升级永久入口；详情页在当前状态和已解锁摘要后、档案前放永久升级区域，明确一次性价格及真实永久专属权益。月/年切换称更改订阅周期并进入 App Store 管理；到期用户显示续费主操作并可选择永久；永久会员不再显示购买操作，但保留原订阅管理入口以处理可能仍在续费的旧订阅。永久主题解锁入口应定位实际可见的永久购买区域。
+- 购买边界：价格使用 StoreKit 返回值；首版不承诺补差价、抵扣已付订阅费或自动退款。购买永久不会自动取消独立的自动续期订阅，购买前明确说明，验单成功后提供管理原订阅入口，不能把打开管理页视为已取消。后续实现应保留已有账号绑定/验单/finish 流程，并按目标商品修正登录续购中“已有会员即停止”的判断，永久权益优先于旧订阅恢复结果。
+- 验证与风险：本次为源码/商品配置文档核对，无代码变更，不运行产品回归；两图拍摄时间不同，不能证明同一时刻权益冲突，沙盒加速到期也需实际环境佐证。实现时需验证到期/前台刷新、购买取消/失败/待处理、登录后继续升级、旧订阅与永久共存、永久主题入口及真实 StoreKit 价格；不把到期时间当作已确认的自动续费状态，不用订阅档案文案暗示已拥有永久权益。
+- 文件与下一步：仅本台账追加本节，保留用户 `backend/.env.staging.example` 和未跟踪文件；没有提交、推送或部署。后续若进入实现，先完整重读台账并建立独立任务卡，限定入口/展示与必要的目标商品续购判断，记录冻结边界例外及对应回归，不并入 JWS、价格/商品 ID、账号迁移或其他路线任务。
+
+### 182. MEMBER-LIFETIME-UPGRADE-01：订阅会员永久升级入口（2026-09-20）
+
+- 状态：`CODE_DONE`（本轮 `IN_PROGRESS` → `CODE_DONE`），开始/代码完成日期 2026-09-20，当前无进行中的实现任务。用户明确要求“进行后续优化”，并确认截图已生效/待续期是沙盒正常到期，本项不改到期判断、状态刷新或自动续订状态模型。开工前团队分段完整阅读台账 1–5899 行（主代理 1–1100；独立代理 1101–3000、3001–4700、4701–5899，截断段重读），合并冻结边界和当前状态；开始工作区仅第181节、用户环境模板和未跟踪资料脏，全部保留。
+- 目标与允许范围：账号页有效订阅的会员详情/永久升级，到期续费或升级，永久主题高亮路由的真实购买目标；会员详情中订阅态的独立永久购买区域、购买前确认和成功后的原订阅管理、永久态档案后的购买恢复/旧订阅管理；按目标商品判定登录后续购，仍需用户明确再次点击。允许 `MemberPricingView.swift`、`SettingsView.swift`、`IAPService.swift`、`SettingsViewModel.swift`、`StateRegressionTests.swift`、`scripts/membership_value_lint.py`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 及本台账。
+- 冻结边界例外：已有任意会员即清购买意图阻止订阅转永久，需改为按目标商品判断；已有等级权重加 Unix 到期秒的排序会让年度高于永久，手动恢复也会在第一笔订阅成功后退出，需将永久优先选择接入自动/手动恢复。仅修正选择与入口，购买、账号 token、后端验单、失败透传及成功后 finish 仍复用原链路；其他同等级排序语义保留。不新增数据字段，无迁移；回滚为按本任务文件差异撤回入口/选择规则，不回滚用户数据或其他任务。
+- 产品边界：月/年更改周期仍进入 App Store 管理；永久沿用非消耗型商品和 StoreKit 实际价格，不改价格、Product ID、权益、退款/抵扣规则，不声称自动取消原订阅。购买成功再引导用户手动取消，打开管理入口不视作取消完成；永久态仍可检查旧订阅。不触及 JWS、服务器配置、生产分支、沙盒到期、账本/照片/同步字段、共享档案快照、个人 AI 池和其他路线。
+- 外部核对：UpNote 官方升级说明及重复收费帮助确认转 lifetime 需用户取消旧订阅，开发者不能代取消（`https://help.getupnote.com/resources/upnote-premium/upgrade-to-premium`、`https://help.getupnote.com/resources/upnote-premium/troubleshooting/duplicate-charges`）；Apple 官方订阅管理支持用户查看、更改和取消（`https://developer.apple.com/documentation/storekit/appstore/showmanagesubscriptions(in:)`、`https://support.apple.com/en-us/118428`）。不将一家产品流程泛称为所有同类 App 的统一规则。
+- 验证计划与下一步：新增订阅可升永久/永久禁止重复买/非会员可选购、永久与年度共存优先及同档期限选择的 XCTest，补会员源码接线门禁和真机矩阵；运行完整 Windows release gate。当前 Windows 无 Swift/Xcode，编译、XCTest、StoreKit及小屏/大字/VoiceOver真机流程待补，完成代码只记 `CODE_DONE`。不自动提交、推送、部署或同步生产。
+- 实现结果：账号页有效月/年会员显示“会员详情”和“升级永久会员”，到期入口为“续费或升级”并展开原三个套餐；订阅详情在已解锁摘要后增加永久购买区域，只展示 StoreKit 实际永久价格，具备加载/不可用/重试状态。永久主题高亮能定位实际升级区；月/年更改周期仍走原 App Store 管理 URL。所有永久购买在 StoreKit 前再次确认一次性金额、原订阅不自动取消/抵扣/退款，成功后提供“管理原有订阅”；永久详情档案后保留检查旧订阅和恢复购买，条件化提醒不伪称用户仍在续费。
+- 续接与恢复：登录成功只保留允许的目标购买及恢复意图，仍须明确再次点击；永久账号拒绝重复购买，购买/恢复增加重入守卫，实际发起时清理旧续接卡。共享 `IAPEntitlementSelection` 保证永久优先，再保持年/月等级及同档到期顺序；自动与手动恢复逐一验证候选，其他账号永久被拒后仍能核对当前账号订阅，不改绑定规则，保留首个真实错误。任务取消或账号切换停止后续候选；成功后 finish 仍只走原手动购买/恢复链路。
+- 独立复核：发现并修正“从其他购买按钮完成升级后续接卡残留”和“自动恢复只验首个永久失败就退出”两项，复核后未发现新的阻塞项。新增 7 个 XCTest（3 个排序/候选保留，4 个异步验证成功/失败回退/首错/取消），扩展现有 3 个会员状态测试；新增测试均未在此 Windows 环境编译或执行，不能当作运行通过。会员 lint 增量覆盖确认/续接/原订阅提示与共享恢复接线；发布矩阵第 8.2.1 节有 7 组 `NOT_RUN` 真机流程。
+- 验证证据：`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 退出 0、`release_repository_gate: OK`；日志 `tmp/member-upgrade-gate-20260920.log`，含会员 lint、原完整体验/文案/语义/夹具/环境门禁，仍只有既有 7 条文案软提示。5 个改动 Swift 文件用现有 tree-sitter 工具与 HEAD 对比无新增语法诊断（SettingsViewModel 原有 2 条解析器诊断未变化，其余 4 个文件为 0）；此项不等于 Swift 编译/类型检查。`git diff --check` 通过。
+- 保护、剩余风险与下一任务：实际修改仅本节允许的 8 个文件；未改商品/价格/权益常量、AppSettings 到期判断、后端/JWS/工程配置、共享档案快照或用户环境模板，保留所有原有未跟踪文件。当前分支 `feature/xuzhangapp-staging`，未提交、推送、部署或同步生产。下一步在同一候选包完成 Debug/Release、完整 XCTest 与第 8.2.1 节 StoreKit/iPhone/大字/VoiceOver 签收，尤其永久与旧订阅共存、不同叙账账号的验证失败回退、取消原订阅不影响永久及主题入口。完成这些外部证据前保持 `CODE_DONE`，不自动启动相邻任务。
+
+### 183. RELEASE-1.0-GAP-REVIEW-02：沙盒购买通过后的封版差距（2026-09-20）
+
+- 范围：用户询问“1.0版本封版还差什么”，并明确沙盒账号订阅购买正常。本轮仅只读审计与验收记录更新，不开始产品实现、不改变路线任务状态。沿用本线程第182节完整台账阅读，核对最新追加、现有封版清单、工作区及真实远端头。
+- 已通过边界：本次用户确认基础沙盒订阅购买；第174/178节已有生产配置 TestFlight 的 Sandbox 购买、同账号恢复、加速到期验收，不再重复列为未通过。该证据不自动覆盖尚未打包的第182节永久升级/新恢复选择或第180节新服务端验签；不推断用户测过所有取消、撤销或跨账号边界。
+- 交付证据：`git ls-remote origin refs/heads/feature/xuzhangapp-staging refs/heads/xuzhang1.0-release-2026` 返回 `7ada3f52b2eae21e2bee9fb348379135e35cf73d` 和 `b60bf71f8d90e09d9e20f735bddda055eebfc1da`，与本地追踪一致。JWS、首次定位/同步反馈修复和独立首页补丁仍有生产差异；永久升级仍未提交。本次未同步分支、未推送、未部署；分支状态不冒充线上部署状态。
+- 封版剩余：确定纳入补丁并固定最终生产 commit/Archive/Build/后端版本；服务端 JWS 配置与部署及真实验单、历史 Production 授权缺口闭环；新永久升级的针对性沙盒真机验收；最终候选的 Xcode/XCTest、数据/图片/同步/权限/性能/无障碍证据；实际待审包审核登录及 App Store Connect 商品、协议和资料配置核对。已实现的 JWS 不再列作未修代码，已通过基础沙盒不重列；其余未回填为证据缺失，不是已知失败。
+- 文件与验证：仅本台账和 `RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md` 追加最新复核（8.6），标明8.3历史状态已被更新。读取现有第182节完整 Windows gate 结果，本轮无产品变化不重复运行全量测试；文档 `git diff --check` 检查。已有全部代码、用户环境模板及未跟踪资料保留。
+- 剩余风险与下一步：本机仍无 Mac/Xcode，未访问服务器运行态、未请求 Apple 正式端点、未登录 App Store Connect，不能据历史记录认定当前线上必然401或审核账号不可用。先固定最终候选，再完成明确缺项及回填已通过证据；个人 AI 池继续2.0，不自动开启新功能、部署或收费测试。
+
+### 184. MEMBER-LIFETIME-UPGRADE-01 测试分支提交交付（2026-09-20）
+
+- 授权与范围：用户明确“帮刚刚修复的提交推送一下”，本次交付第 182 节会员升级与恢复修复及第 183 节封版复核文档，目标仅为 `feature/xuzhangapp-staging`。沿用此前测试分支交付边界，不同步生产、不部署后端、不生成或上传 TestFlight 包；实现状态保持 `CODE_DONE`。
+- 文件：`NativeDemoApp/Services/IAPService.swift`、`NativeDemoApp/ViewModels/SettingsViewModel.swift`、`NativeDemoApp/Views/MemberPricingView.swift`、`NativeDemoApp/Views/SettingsView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/membership_value_lint.py`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、`RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md` 及本台账，共 9 个文件。用户 `backend/.env.staging.example` 和全部未跟踪文件不纳入提交，原内容保留。
+- 验证证据：复核本轮差异和 `tmp/member-upgrade-gate-20260920.log` 中 `release_repository_gate: OK`，实现未再修改，沿用第 182 节完整 Windows 门禁，不重复无变更测试；提交前执行 `git diff --check` 并核对暂存文件。提交前真实远端测试分支为 `7ada3f52b2eae21e2bee9fb348379135e35cf73d`、生产分支为 `b60bf71f8d90e09d9e20f735bddda055eebfc1da`；普通提交后显式推送测试分支，再核对远端提交，结果在本轮交付答复记录。
+- 剩余风险与下一步：Windows 无 Xcode，Swift 编译、XCTest、Archive 和新增会员流程真机签收仍待完成。第 183 节及签收文档 8.6 的“未提交”是本次交付前快照；代码推送不等于测试包已更新，下一步须用包含本次提交的新 Build 验证永久升级、登录续接及永久与订阅共存恢复。
