@@ -3044,7 +3044,7 @@ struct SettingsView: View {
                         openMemberPricingFromAccountSheet()
                     } label: {
                         HStack(spacing: 6) {
-                            Text("会员详情")
+                            Text("查看完整生活档案包含")
                                 .font(.subheadline.weight(.medium))
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 10, weight: .bold))

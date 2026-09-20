@@ -703,6 +703,170 @@ final class CommittedRecordNoteFieldTests: XCTestCase {
         XCTAssertEqual(field.text, original)
         XCTAssertTrue(committed.isEmpty)
     }
+
+    func testKeyboardAvoidanceUsesOnlyTheCoveredPartOfTheLocalViewport() {
+        let viewport = CGRect(x: 0, y: 0, width: 390, height: 640)
+        let keyboard = CGRect(x: 0, y: 420, width: 390, height: 330)
+
+        XCTAssertEqual(
+            RecordKeyboardViewportReader.bottomOverlap(viewport: viewport, keyboard: keyboard),
+            220
+        )
+    }
+
+    func testKeyboardAvoidanceDoesNotAddAnInsetWithoutAnIntersection() {
+        let keyboard = CGRect(x: 0, y: 420, width: 390, height: 330)
+        let visibleViewport = CGRect(x: 0, y: 0, width: 390, height: 420)
+        XCTAssertEqual(
+            RecordKeyboardViewportReader.bottomOverlap(viewport: visibleViewport, keyboard: keyboard),
+            0
+        )
+
+        let viewport = CGRect(x: 0, y: 0, width: 390, height: 640)
+        let hiddenKeyboard = CGRect(x: 0, y: 750, width: 390, height: 330)
+        XCTAssertEqual(
+            RecordKeyboardViewportReader.bottomOverlap(viewport: viewport, keyboard: hiddenKeyboard),
+            0
+        )
+
+        let adjacentKeyboard = CGRect(x: 410, y: 420, width: 320, height: 230)
+        XCTAssertEqual(
+            RecordKeyboardViewportReader.bottomOverlap(viewport: viewport, keyboard: adjacentKeyboard),
+            0
+        )
+    }
+
+    func testKeyboardAvoidanceKeepsTheViewportAboveFloatingOrOversizedKeyboards() {
+        let viewport = CGRect(x: 20, y: 40, width: 700, height: 640)
+        let floatingKeyboard = CGRect(x: 210, y: 380, width: 320, height: 220)
+        XCTAssertEqual(
+            RecordKeyboardViewportReader.bottomOverlap(viewport: viewport, keyboard: floatingKeyboard),
+            300
+        )
+
+        let oversizedKeyboard = CGRect(x: 0, y: 0, width: 800, height: 900)
+        XCTAssertEqual(
+            RecordKeyboardViewportReader.bottomOverlap(viewport: viewport, keyboard: oversizedKeyboard),
+            viewport.height
+        )
+    }
+
+    private final class EditorDriver: ObservableObject {
+        @Published var saveRequestID: UUID?
+        var savedItem: HomeItem?
+    }
+
+    private struct HostedEditor: View {
+        @ObservedObject var driver: EditorDriver
+        let item: HomeItem
+
+        var body: some View {
+            FocusedRecordEditor(
+                item: item,
+                autoCommitRequestID: driver.saveRequestID,
+                onSave: { item, _ in
+                    driver.savedItem = item
+                    return true
+                },
+                onCancel: {},
+                onDelete: {}
+            )
+        }
+    }
+
+    func testHostedEditorKeepsNoteFocusAcrossDeletionAndInsertionUntilSave() throws {
+        try withHostedEditor { host, driver in
+            let note = try XCTUnwrap(textFields(in: host.view).first { $0.accessibilityLabel == "备注" })
+            XCTAssertTrue(note.becomeFirstResponder())
+            settleUI(host)
+            note.selectedTextRange = note.textRange(from: note.endOfDocument, to: note.endOfDocument)
+
+            for expected in ["午饭备", "午饭"] {
+                note.deleteBackward()
+                settleUI(host)
+                XCTAssertEqual(note.text, expected)
+                XCTAssertTrue(note.isFirstResponder)
+                XCTAssertTrue(textFields(in: host.view).contains { $0 === note })
+            }
+
+            note.insertText("加菜")
+            settleUI(host)
+            XCTAssertEqual(note.text, "午饭加菜")
+            XCTAssertTrue(note.isFirstResponder)
+
+            driver.saveRequestID = UUID()
+            settleUI(host)
+            XCTAssertEqual(driver.savedItem?.title, "午饭加菜")
+            XCTAssertFalse(note.isFirstResponder)
+            settleUI(host)
+            XCTAssertFalse(note.isFirstResponder)
+        }
+    }
+
+    func testHostedEditorTransfersFocusBetweenAmountAndNote() throws {
+        try withHostedEditor { host, _ in
+            let fields = textFields(in: host.view)
+            let note = try XCTUnwrap(fields.first { $0.accessibilityLabel == "备注" })
+            let amount = try XCTUnwrap(fields.first { $0.keyboardType == .decimalPad })
+
+            for _ in 0..<2 {
+                XCTAssertTrue(note.becomeFirstResponder())
+                settleUI(host)
+                XCTAssertTrue(note.isFirstResponder)
+                XCTAssertFalse(amount.isFirstResponder)
+                note.selectedTextRange = note.textRange(from: note.endOfDocument, to: note.endOfDocument)
+                note.insertText("字")
+                settleUI(host)
+                XCTAssertTrue(note.isFirstResponder)
+
+                XCTAssertTrue(amount.becomeFirstResponder())
+                settleUI(host)
+                XCTAssertTrue(amount.isFirstResponder)
+                XCTAssertFalse(note.isFirstResponder)
+                amount.selectedTextRange = amount.textRange(from: amount.endOfDocument, to: amount.endOfDocument)
+                amount.deleteBackward()
+                settleUI(host)
+                XCTAssertTrue(amount.isFirstResponder)
+                XCTAssertFalse(note.isFirstResponder)
+            }
+        }
+    }
+
+    private func withHostedEditor(
+        _ body: (UIHostingController<HostedEditor>, EditorDriver) throws -> Void
+    ) throws {
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }) else {
+            throw XCTSkip("A foreground iOS app scene is required for responder integration tests.")
+        }
+        let previousKeyWindow = scene.windows.first(where: \.isKeyWindow)
+        let driver = EditorDriver()
+        let item = HomeItem(title: "午饭备注", amount: 32, category: .dining, createdAt: Date())
+        let host = UIHostingController(rootView: HostedEditor(driver: driver, item: item))
+        let window = UIWindow(windowScene: scene)
+        window.frame = scene.screen.bounds
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer {
+            host.view.endEditing(true)
+            window.isHidden = true
+            window.rootViewController = nil
+            previousKeyWindow?.makeKey()
+        }
+        settleUI(host)
+        try body(host, driver)
+    }
+
+    private func settleUI(_ host: UIHostingController<HostedEditor>) {
+        // A real SwiftUI render must consume the text/focus changes before assertions.
+        host.view.layoutIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+        host.view.layoutIfNeeded()
+    }
+
+    private func textFields(in view: UIView) -> [UITextField] {
+        (view as? UITextField).map { [$0] } ?? view.subviews.flatMap { textFields(in: $0) }
+    }
 }
 #endif
 

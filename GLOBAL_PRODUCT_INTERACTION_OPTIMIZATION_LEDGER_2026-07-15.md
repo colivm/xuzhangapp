@@ -5941,3 +5941,61 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 现场补充：用户进一步确认旧入口会连续弹出三次登录窗口，记录为同次进入后的重复认证现象；各次输入/取消操作及系统错误日志尚未取得，不据次数断言 App 发起了三次调用或 Apple 固定重试三次。新 Build 需记录一次点击后的弹窗数量、取消能否退出及是否自行再弹；本次仅补证据与验收文档，无新增代码，不重复完整门禁，状态保持 `CODE_DONE`。
 - 后续交付授权与复测（2026-09-20）：用户明确“提交推送 再测一下”，仅交付本节允许的 4 文件到 `feature/xuzhangapp-staging`。按要求重新运行完整 Windows 门禁，退出 0、`release_repository_gate: OK`，日志 `tmp/native-subscription-management-delivery-gate-20260920.log`，只有原有 7 条文案软提示；独立复核提交范围通过，代码未再修改。`git diff --check` 通过，普通提交前核对暂存范围，随后显式推送测试分支并核实远端提交。交付前测试远端为 `f25349e0b862e21ba3795ee687124905476c0efe`，生产远端为 `b60bf71f8d90e09d9e20f735bddda055eebfc1da`，最终提交与推送结果在本轮答复记录。
 - 交付边界：此前“未提交推送”为本次授权前快照；本次不打包或上传 TestFlight、不部署、不改生产分支。`backend/.env.staging.example` 原内容与全部未跟踪资料保留且不提交。Mac 编译/XCTest和同设备沙盒页仍待新 Build 签收，四组真机用例保持 `NOT_RUN`，状态仍为 `CODE_DONE`。
+
+### 186. 沙盒清历史与 staging 清库后的购买错误诊断（2026-09-20）
+
+- 范围与现场：用户提供三张会员购买提示图，分别为“月度订阅已过期或尚未生效”“属于另一个叙账账号”“已经绑定到另一个叙账账号”；随后确认 Apple 沙盒历史及 staging 数据库已清空，沙盒账号/叙账手机号账号只重新登录过其中一个。清理所含表、实际包 Build/API、各截图与清理的先后及交易 ID 尚未取得。仅只读核对客户端、后端与 Apple 官方说明，不开始实现、不改变既有任务状态。
+- 客户端证据：`IAPPurchaseFailureCopy` 第一种原文来自 `IAPService.purchase` 在 Apple 返回交易后对 `expirationDate <= Date()`（或缺失日期）的本地拦截，发生在提交后端前；不能用清业务数据库解决，也不能由文案确定是旧缓存还是实际加速到期。购买时 `appAccountToken` 为当前 `cloudUserId`，不是手机号本身；本机 pending map 不作为发起购买时选择交易的数据源。
+- 后端证据：`APP_ACCOUNT_MISMATCH` 比较 Apple 已验交易里的 token 与当前登录用户 ID，在查业务交易绑定之前即可拒绝。`store.getOrCreateUserByPhone` 在用户不存在时生成新 UUID，因此清用户表后同手机号重建不保证与旧 Apple 交易归属一致。`TRANSACTION_ALREADY_BOUND` 则要求当前运行存储查到相同 originalTransactionId 且归属他人；按当前源码，正确运行存储在当次查询确实无该记录就不能产生此错误。Postgres 模式逐次查 `iap_transactions`，该表无 users 外键；绑定不在 Redis。需区分实际访问另一后端、未包含交易表、进程内存模式、清后写回或清理前截图，不能笼统认定用户未清库。
+- Apple 证据：`https://developer.apple.com/documentation/storekit/testing-in-app-purchases-with-sandbox` 明确清空购买历史后还需退出沙盒账号以清理设备购买缓存，再重新登录；历史多时清理可能超过数分钟。TestFlight 沙盒交易环境与业务 staging/production 独立，且媒体与购买项目的正式账号重新登录会让 TestFlight 交易改用该 Apple 账号，不能仅凭“TestFlight/沙盒”判断清理的是当前交易账号。
+- 验证与下一步：本轮仅本台账新增诊断，独立后端复核确认上述分支；无产品修改，不重复运行测试。先完成沙盒账号与叙账账号两边重新登录，确认清历史完成及实际购买账号，随后在固定账号下做一次新的沙盒购买并记录 Build/时间；若仍错误，核对实际 API 域名、当前 userId、Apple appAccountToken、transactionId/originalTransactionId 和到期时间的对应关系，按最少脱敏信息定位。不打印 JWT/JWS/完整环境变量，不再自动清库、不改绑、不部署；当前没有设备或线上请求证据，不能宣称已确定根因。
+
+### 187. 新沙盒账号月度升级永久与取消订阅用户验收（2026-09-20）
+
+- 用户证据：明确反馈“换了新账号，订阅月会员、升级永久会员，然后点击管理订阅、取消订阅都正常，取消订阅后永久会员资格正常”。记录上述成功流程为用户确认通过，不再把实际手动取消或升级成功路径列作完全未测。
+- 对应范围：第 182 节月度升级永久及原订阅取消不影响永久，第 185 节管理入口成功路径；发布矩阵 `MEMBER-UPGRADE-03/04`、`MEMBER-MANAGE-03` 改为具体已通过子项与其余待测，新增 8.2.3 用户签收记录，封版签收文档新增 8.7。会员实现任务整体仍为 `CODE_DONE`，不冒充全部 `VERIFIED`。
+- 证据边界：用户未提供本次 Build、设备/iOS、后端版本；不推断全部三个入口、年度升级、重启/恢复、登录续接、购买取消/失败/pending、弱网或无障碍均通过。管理可用不自动推断认证弹窗精确次数；第 186 节旧沙盒清历史与清库后的错误根因仍未完全确认，也不据本次成功认定服务器部署/正式环境授权已验收。
+- 文件与验证：仅本台账、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、`RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md` 更新证据；沿用既有代码及 Windows 门禁，本轮无产品改动，不重复运行测试。独立复核证据覆盖范围，文档执行 `git diff --check`；用户环境模板、此前台账第 186 节及未跟踪资料全部保留，未提交推送、未部署或同步生产。
+- 下一步：保持本次沙盒账号、叙账账号和交易记录，优先关闭重开 App 后确认永久，再手动恢复购买确认仍为永久；补实际 Build/设备信息后归入最终包签收。已完成的月度购买、升级、管理及取消流程不要求重复证明。
+
+### 188. MEMBER-ENTRY-COPY-RESTORE-01：恢复账号页原档案入口名称（2026-09-20）
+
+- 状态：`CODE_DONE`（本轮 `IN_PROGRESS` → `CODE_DONE`）。用户明确要求将截图中被改为“会员详情”的入口“改回去”；依据提交 `f25349e` 父版本恢复原文“查看完整生活档案包含”。沿用本线程完整台账阅读及最新追加，仅修改 `NativeDemoApp/Views/SettingsView.swift` 的该处入口文字和本台账。
+- 边界与验证：不调整入口路由、按钮样式、会员页标题、升级和购买恢复行为；保留既有验收文档、台账诊断、用户环境模板及未跟踪资料。单行文案变更执行已有会员门禁和 `git diff --check`，不新增测试或重跑完整发布门禁；尚无新包真机显示证据，不自动提交推送或同步生产。
+- 结果与下一步：入口已恢复原文，`python scripts/membership_value_lint.py` 返回 `membership_value_lint: OK`，限定文件 `git diff --check` 通过。Windows 未执行 Xcode/真机；下次测试包查看恢复后的入口显示。本轮未提交推送。
+
+### 189. 用户手测清单逐项确认回填（2026-09-20）
+
+- 用户证据：第 187 节之后明确确认关闭重开 App 后永久正常、恢复购买正常，以及清单第 1、6 条通过；本轮进一步确认“8,9,11验过了”。按原 16 项手测编号，已确认通过为 1、3、4、6、8、9、11；新增对应连续记账/保存、首页滑动删除、照片查看修改。此前第 187 节所列重启/恢复待测已被后续反馈覆盖，不再要求重复证明。
+- 剩余清单：2（购买取消/重复点击）、5（登录续接/防重复购买）、7（Apple 商品加载失败与恢复网络重试）、10（AI 保存/清空）、12（本地备份恢复）、13（权限）、14（断网/双设备同步）、15（账号切换/审核登录）、16（显示/无障碍）。第 7 条此前仅澄清测试含义，没有用户通过确认；可见缓存价或本地备用价不等于已触发商品加载失败。
+- 文件与验证：仅更新本台账、`RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md` 第 8.7/8.8 节、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 第 8.2.1/8.2.3 节，使已通过子项与剩余项一致。无产品代码变更，不新增或重复运行测试，文档 `git diff --check` 核对；保留尚未提交的入口文案恢复、已有用户环境模板及未跟踪资料，不提交推送或部署。
+- 边界与下一步：接受用户逐项反馈为手测通过，不扩展到未报告的工程专项或全部 `VERIFIED`；Build、设备/iOS、实际后端版本仍待补。继续剩余九项，已测七项移出用户待测列表；旧沙盒账号诊断与最终生产交付边界保持。
+
+### 190. RECORD-NOTE-FOCUS-FIX-01：备注展开与连续编辑失焦修复（2026-09-20）
+
+- 状态：`CODE_DONE`（本轮 `IN_PROGRESS` → `CODE_DONE`），当前无进行中的实现任务，未标记 VERIFIED。用户反馈记账页点“自己写一句”没有焦点、已有备注删除一字后键盘收起，要求检查近期回归。沿用本线程第 182 节团队全文阅读及后续逐节续读，重新核对第 176 节输入法合同和全局冻结边界；保留全部既有未提交内容。
+- 历史与原因：`5637193`（2026-09-18）将三个备注输入从 SwiftUI TextField 换为 `CommittedRecordNoteField`，移除了 `.focused`，却继续通过普通 Binding 读写 `@FocusState`。新建和 Sheet 已无 SwiftUI 焦点目标；聚焦编辑页只有金额挂在焦点系统上。UIKit 获得焦点后文本刷新仍可能读到 false，触发 wrapper 主动 resign。展开后的自动聚焦早于该改动已存在，不是原本没有设计；这是该次 UIKit 适配遗漏，与本次现场吻合，尚无本机 iOS 运行证据。
+- 允许范围：`RecordView.swift`、`RecordEditSheet.swift`、`FocusedRecordEditor.swift` 的备注焦点所有权与明确收键盘入口，必要的 `StateRegressionTests.swift` 和 `scripts/record_continuous_intent_regression.py` 回归，以及本台账和第 8 项验收补充。UIKit 备注用普通状态驱动，原生金额仍用 SwiftUI FocusState；保持中文组词提交、保存前结束编辑和明确切换输入的行为。
+- 冻结：不改分类最后明确意图、文案/润色/情绪、金额/保存/存储、照片/同步/会员、页面布局或入口名称；不整包回退第 176 节，不改用户环境模板。不进行迁移、提交推送、生产同步或部署。
+- 验证计划与下一步：核对三个入口和延迟焦点请求，增加承载真实编辑视图的焦点回归及静态接线守卫，执行连续记账专项和 Windows 完整门禁。Windows 无 Xcode/iPhone，Swift 编译、XCTest 和实际键盘保持需新包签收。第 8 项之前通过的记账/编辑结果继续保留，本次新增失焦反馈单列待复验，不能以旧通过或静态检查覆盖。
+- 实际实现：新建页和编辑 Sheet 将 UIKit 备注的未注册 FocusState 改为普通 State；FocusedRecordEditor 分离备注 State 与原生金额 FocusState，获得焦点时清另一方，备注结束不再清新金额焦点。分类/日期操作复用同步 dismissKeyboard。旧金额延迟请求在备注已获焦时退出，备注延迟请求在编辑区已关闭（新建还检查手动模式）时退出；保留原动画时序、滚动策略和共享输入法提交逻辑。
+- 文件与回归：实际改动为上述三个 Swift 页面、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/record_continuous_intent_regression.py`、`RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md` 和本台账。新增 2 项 UIHostingController 承载真实 FocusedRecordEditor 的 XCTest，覆盖连续删除/插入后同一控件保持第一响应者、实际保存回调收到正文并主动收起、金额/备注来回切换；没有只模拟 Coordinator。静态守卫防止 UIKit 备注重新接回无目标 FocusState。独立历史核对与最终代码/测试复核未发现新增阻塞问题。
+- 验证证据：`python scripts/record_continuous_intent_regression.py` 通过；`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 退出 0，`release_repository_gate: OK`，日志 `tmp/record-note-focus-gate-20260920.log`，只有既有 7 条文案软提示；`git diff --check` 通过。未执行 Swift 编译或 XCTest；2 项新测试无活动 iOS Scene 时会明确 skip，不能把该情形记为通过。
+- 保护与剩余风险：前序会员入口文案恢复、验收文档、台账诊断、用户 `.env.staging.example` 和所有未跟踪资料均保留；未提交推送、未部署或同步生产。下一步在 Mac 完成 Debug/Release 编译与完整 XCTest，并确认 hosting 测试实际执行（含渲染等待稳定性），再按签收第 8.9 节用新包复验新建/两个历史编辑入口的自动聚焦、连续删字/删空/中间编辑、中文组词、金额互切及立即保存。当前 Windows 证据不足以宣称真实键盘问题已验收；不扩大至其他页面或相邻路线任务。
+
+### 191. RECORD-NOTE-KEYBOARD-AVOIDANCE-01：记账备注保持在键盘上方（2026-09-20）
+
+- 状态：`CODE_DONE`（本轮 `IN_PROGRESS` → `CODE_DONE`），当前无进行中的实现任务。用户进一步明确输入框要自动上抬到键盘上方。沿用本线程完整台账阅读，续读第 190 节及当前代码；第 190 节焦点修复保留，不能把恢复原有上滚等同于可靠避让。
+- 原因与范围：`ContentView` 对内容和 Tab 栏整体忽略键盘安全区，记账页仅用固定 520 留白和聚焦后 0.18/0.42 秒滚到全高区域中心，小屏/高键盘可能仍遮挡。本项仅允许 `RecordView.swift` 内本地测量实际键盘遮挡并收缩滚动区域，补键盘展开/高度增加后的备注定位；必要的 `StateRegressionTests.swift`、现有连续输入源码门禁、签收文档和本台账。编辑 Sheet 已使用系统安全区，未发现相同缺口，不扩大到全局或两个历史编辑布局。
+- 冻结边界：本任务只允许记账备注编辑时的局部视口高度变化；不改 ContentView/Tab 栏、金额键盘、分类/输入法/保存、备注文案、会员或数据规则。测量完整视口，屏幕坐标经当前 window 转换，不按固定键盘高度，不重复避让已被系统移开的区域；失焦或键盘隐藏后恢复原区域。无迁移，不提交推送或部署，全部既有 dirty 修改保留。
+- 验证计划与下一步：加入遮挡几何的边界回归，源码守卫确认本地避让和键盘显示后的定位接线，运行完整 Windows 门禁；新包必须覆盖小屏、中文候选栏/切换键盘、收起重开、连续编辑和切金额，确认备注完整位于键盘上沿以上且不来回跳动。Windows 不能执行 UIKit/SwiftUI 键盘验收，完成后最多记 CODE_DONE。
+- 实际实现与文件：`RecordView.swift` 新增局部 `RecordKeyboardViewportReader`，把键盘结束 frame 从当前屏幕转到 window 再转到完整页面视口，监听尺寸变化/隐藏及布局变化；只在备注聚焦时以实际遮挡量设置 ScrollView 外部底部 padding。测量在 padding 外保持稳定，不遍历私有 SwiftUI 视图；已有安全区避让后无交集则为 0。滚动 ID 移到输入框本身，键盘真实显示和遮挡高度增加后重新居中于可见视口；浮动键盘保守收缩至上沿。ContentView 与 Tab 栏未改，两个编辑布局及前轮焦点修复保留。
+- 验证证据：`StateRegressionTests.swift` 新增 3 项几何测试，覆盖局部遮挡不同于键盘总高、已避让/隐藏/横向不交集、浮动及超大键盘上界；原 2 项 hosting 焦点测试保留，全部未在 Windows 编译运行。`scripts/record_continuous_intent_regression.py` 追加避让接线守卫并通过；完整 Windows gate 退出 0、`release_repository_gate: OK`，日志 `tmp/record-note-keyboard-gate-20260920.log`，只有原有 7 条文案软提示。`git diff --check` 通过，独立只读审阅未发现明确阻断问题。
+- 剩余风险与下一步：实际文件仅 RecordView、StateRegressionTests、连续输入源码脚本、签收文档第 8.9 节和本台账。Windows 无 Xcode，尚无 Swift 编译、几何/XCTest 执行或真机键盘动画证据；尤其中文候选栏变化、交互拖动收键盘与 padding 动画需实际小屏验收，不能标 VERIFIED。下一步合并第 190 节在新 Build 验证自动聚焦、连续删字与键盘上方完整可见，记录设备/iOS；未提交推送、未同步生产或部署，前序 dirty 内容和用户环境模板均保留。
+
+### 192. 备注焦点、键盘避让及会员入口名称恢复提交交付（2026-09-20）
+
+- 授权与范围：用户明确“这几个修复都提交推送一下”，本轮交付第 188、190、191 节已有修复及第 186–189 节已记录的诊断/用户验收，目标仅为当前 `feature/xuzhangapp-staging`。沿用本线程完整台账阅读并续读最新记录，不开始新实现任务，各修复保持 CODE_DONE。
+- 提交文件：`NativeDemoApp/Views/RecordView.swift`、`RecordEditSheet.swift`、`FocusedRecordEditor.swift`、`SettingsView.swift`，`NativeDemoAppTests/StateRegressionTests.swift`，`scripts/record_continuous_intent_regression.py`，两份 RELEASE 签收/门禁文档和本台账，共 9 文件。仅显式暂存这些路径；用户 `backend/.env.staging.example` 和全部未跟踪素材、脚本、输出、tmp 保留且不提交。
+- 检查与交付：提交前核对真实远端测试分支 `96c3ee70fecea9845f23744f1caf0e4adb6ace7a`，生产分支 `b60bf71f8d90e09d9e20f735bddda055eebfc1da`。代码和测试自第 191 节完整 Windows 门禁通过后未变，沿用 `tmp/record-note-keyboard-gate-20260920.log` 的 `release_repository_gate: OK`（原有 7 条文案软提示），不重复无变化全量测试；执行最终差异/暂存范围及 `git diff --check` 核对。普通提交后显式推送测试分支，再核对真实远端提交，最终 hash 和推送结果在本轮答复记录。
+- 剩余风险与下一步：此前各节“未提交推送”为本次授权前快照，本次不打包或上传 TestFlight、不部署、不更改生产分支。Windows 无 Swift/Xcode，5 项新增 XCTest、Debug/Release 编译与第 8.9 节真机流程仍待新 Build 验收；推送不代表用户设备上的包已经包含修复。下一步用包含本次提交的包验证自动聚焦、连续删字、键盘上方完整可见与会员入口原名。

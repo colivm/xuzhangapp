@@ -119,7 +119,9 @@ struct RecordView: View {
     @AppStorage("scene_pack_usage_v1") private var scenePackUsageStorage = ""
     @AppStorage("scene_pack_pinned_v1") private var scenePackPinnedStorage = ""
     @AppStorage("ocr_import_member_upsell_last_shown_at") private var ocrImportMemberUpsellLastShownAt = 0.0
-    @FocusState private var focusedField: RecordField?
+    // The UIKit note field owns its responder; there is no SwiftUI focus target.
+    @State private var focusedField: RecordField?
+    @State private var keyboardBottomOverlap: CGFloat = 0
 
     private enum RecordField {
         case amount
@@ -1106,7 +1108,7 @@ struct RecordView: View {
         guard selectedEntryMode == .manual else { return }
         focusedField = nil
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            guard selectedEntryMode == .manual else { return }
+            guard selectedEntryMode == .manual, focusedField != .note else { return }
             withAnimation(.easeInOut(duration: 0.18)) {
                 amountPadActive = true
             }
@@ -1134,6 +1136,7 @@ struct RecordView: View {
             noteEditorExpanded = true
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+            guard selectedEntryMode == .manual, noteEditorExpanded else { return }
             focusedField = .note
         }
     }
@@ -2015,7 +2018,23 @@ struct RecordView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
+            .padding(.bottom, focusedField == .note ? keyboardBottomOverlap : 0)
+            .background {
+                // Measure outside the padding so shrinking the scroll viewport
+                // cannot change the overlap measurement and create a loop.
+                RecordKeyboardViewportReader { keyboardBottomOverlap = $0 }
+                    .allowsHitTesting(false)
+            }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: keyboardBottomOverlap)
             .animation(.easeInOut(duration: 0.18), value: shouldShowAmountQuickKeys)
+            .onChange(of: keyboardBottomOverlap) { oldValue, newValue in
+                guard focusedField == .note, newValue > oldValue else { return }
+                scrollNoteFieldIntoView(scrollProxy)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
+                guard focusedField == .note else { return }
+                scrollNoteFieldIntoView(scrollProxy, delay: 0)
+            }
             .task(id: previewLifeMarkPreparationKey) {
                 await preparePreviewLifeMark(for: previewLifeMarkPreparationKey)
             }
@@ -3017,6 +3036,7 @@ struct RecordView: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(Color.white.opacity(0.45), lineWidth: 1)
             )
+            .id("recordNoteField")
 
             if let message = homeViewModel.recordInputMessage {
                 Text(message)
@@ -3047,7 +3067,6 @@ struct RecordView: View {
                 }
             }
         }
-        .id("recordNoteField")
     }
 
     // MARK: - Save Row
@@ -3504,6 +3523,89 @@ struct RecordView: View {
     private func applyDot00() {
         let base = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0
         homeViewModel.inputAmount = String(format: "%.2f", base)
+    }
+}
+
+/// The tab container ignores keyboard safe areas. Measure this page's actual
+/// overlap so its scroll viewport can still end above the keyboard.
+struct RecordKeyboardViewportReader: UIViewRepresentable {
+    let onOverlapChange: (CGFloat) -> Void
+
+    static func bottomOverlap(viewport: CGRect, keyboard: CGRect) -> CGFloat {
+        guard !viewport.isEmpty, viewport.intersects(keyboard) else { return 0 }
+        return min(viewport.height, max(0, viewport.maxY - keyboard.minY))
+    }
+
+    func makeUIView(context: Context) -> ViewportView {
+        let view = ViewportView(frame: .zero)
+        view.onOverlapChange = onOverlapChange
+        return view
+    }
+
+    func updateUIView(_ view: ViewportView, context: Context) {
+        view.onOverlapChange = onOverlapChange
+    }
+
+    final class ViewportView: UIView {
+        var onOverlapChange: ((CGFloat) -> Void)?
+        private var keyboardScreenFrame: CGRect?
+        private var lastReportedOverlap: CGFloat = 0
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            isUserInteractionEnabled = false
+            let center = NotificationCenter.default
+            for name in [UIResponder.keyboardWillChangeFrameNotification, UIResponder.keyboardDidChangeFrameNotification] {
+                center.addObserver(self, selector: #selector(keyboardFrameChanged(_:)), name: name, object: nil)
+            }
+            for name in [UIResponder.keyboardWillHideNotification, UIResponder.keyboardDidHideNotification] {
+                center.addObserver(self, selector: #selector(keyboardHidden), name: name, object: nil)
+            }
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        deinit { NotificationCenter.default.removeObserver(self) }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window == nil { keyboardScreenFrame = nil }
+            publishOverlap()
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            publishOverlap()
+        }
+
+        @objc private func keyboardFrameChanged(_ notification: Notification) {
+            guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+            keyboardScreenFrame = frame
+            publishOverlap()
+        }
+
+        @objc private func keyboardHidden() {
+            keyboardScreenFrame = nil
+            publishOverlap()
+        }
+
+        private func publishOverlap() {
+            let overlap: CGFloat
+            if let window, let keyboardScreenFrame {
+                let frameInWindow = window.convert(keyboardScreenFrame, from: window.screen.coordinateSpace)
+                let frameInView = convert(frameInWindow, from: window)
+                overlap = RecordKeyboardViewportReader.bottomOverlap(viewport: bounds, keyboard: frameInView)
+            } else {
+                overlap = 0
+            }
+            guard overlap != lastReportedOverlap else { return }
+            lastReportedOverlap = overlap
+            // Layout/keyboard callbacks can run during a SwiftUI update.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.lastReportedOverlap == overlap else { return }
+                self.onOverlapChange?(overlap)
+            }
+        }
     }
 }
 
