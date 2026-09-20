@@ -25,7 +25,10 @@ REQUIRED = {
         "订阅不会自动取消",
         "不会自动抵扣或退款",
         "取消原订阅不影响永久权益",
-        'subscriptionManagementLink(title: "检查原有订阅")',
+        'subscriptionManagementButton(title: "检查原有订阅")',
+        'subscriptionManagementButton(title: "在 App Store 管理订阅")',
+        'subscriptionManagementButton(title: "管理原有订阅")',
+        ".manageSubscriptionsSheet(isPresented: $showSubscriptionManagement)",
         "IAPEntitlementSelection.verifyFirstAvailable(in: payloads)",
     ),
     "NativeDemoApp/Views/SettingsView.swift": (
@@ -90,6 +93,9 @@ def main() -> int:
         if value not in view_scope:
             print(f"MemberPricingView.swift: lifetime purchase confirmation is disconnected `{value}`")
             return 1
+    if "apps.apple.com/account/subscriptions" in view_scope:
+        print("MemberPricingView.swift: subscription management must use the native StoreKit sheet")
+        return 1
     print("membership_value_lint: OK")
     return 0
 

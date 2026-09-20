@@ -220,6 +220,21 @@ python scripts/validate_release_gate.py --phase device-audit `
 
 自动回归入口：`MembershipDetailPresentationPolicyTests`、`IAPEntitlementSelectionTests` 与原登录意图状态机测试。Windows 仅执行会员文案与仓库门禁；Swift 6 Debug/Release、XCTest、StoreKit 沙盒和本节真机项目须在 macOS/Xcode 与 iPhone 上补验，完成前不得标记 `VERIFIED`。
 
+### 8.2.2 MEMBER-SUBSCRIPTION-MANAGEMENT-01 原生订阅管理（2026-09-20）
+
+对应台账第 185 节。用户已确认系统设置中的沙盒账户管理可用，旧 App 外链会打开普通 App Store 登录页/无法连接。使用包含本次修复的 Build，在同一设备、同一购买账号对照；仅看到普通 App Store 页面不能推断内购或后端切到了 Production。
+
+用户补充旧入口会连续弹出三次登录窗口。新包测试时记录一次点击后的弹窗数量、每次输入或取消动作、关闭后是否自行再弹，并与系统设置中的沙盒管理入口对照；次数本身不证明 App 重复调用，也不作为 Apple 固定重试机制的结论。
+
+| ID | 操作 | 通过标准 | 状态 |
+|---|---|---|---|
+| MEMBER-MANAGE-01 | 有效订阅账号从会员详情点击“在 App Store 管理订阅”；核对开发者设置里的沙盒账号与交易 | 在叙账内显示系统订阅管理页，不主动跳 App Store Today 或普通账号登录外链；显示对应测试订阅，支持关闭返回 | `NOT_RUN` |
+| MEMBER-MANAGE-02 | 从永久购买成功提示的“管理原有订阅”和永久详情“检查原有订阅”分别进入；快速连点、关闭重开三次 | 三入口一致，只呈现一个系统页；成功提示先收起，返回不残留遮挡、不自动再次打开；无原订阅时不伪报仍在续费 | `NOT_RUN` |
+| MEMBER-MANAGE-03 | 系统页取消操作/取消旧订阅/更改周期后返回，另测试断网、系统认证取消及错误关闭后重试 | 关闭本身不显示“已取消”，不开购买或恢复认证；已有权益按交易核对，取消续费不立即撤销当期权益，永久优先保留；失败不自动跳普通 App Store 外链 | `NOT_RUN` |
+| MEMBER-MANAGE-04 | 购买或恢复处理中、登录 Sheet 和永久确认显示时检查入口；深色、大字号、VoiceOver 下操作 | 冲突操作互斥，按钮可读且可再次打开；Windows 检查不能代替系统页实测，正常 Apple 认证提示也不能当作 App 循环发起认证 | `NOT_RUN` |
+
+无法手动取消时，可先验永久与有效订阅共存、旧订阅实际结束后永久保留；“手动取消”子步骤仍记未运行，加速到期和清空购买历史均不能冒充取消证据。
+
 ### 8.3 PERF-05 / LOGIC-01～07 产品状态矩阵
 
 以下矩阵按状态验证唯一主动作、保留入口和取消/失败边界。代码与 Windows 门禁通过不替代本表真机结论。

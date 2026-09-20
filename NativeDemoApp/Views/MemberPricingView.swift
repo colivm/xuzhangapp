@@ -90,9 +90,10 @@ struct MemberPricingView: View {
     @State private var isLoadingProducts = false
     @State private var didAttemptProductLoad = false
     @State private var purchaseNoticeIncludesSubscriptionManagement = false
+    @State private var showSubscriptionManagement = false
+    @State private var subscriptionManagementRefreshID = 0
     private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
     private let privacyURL = URL(string: "https://xuzhangapp.com/legal/privacy.html")!
-    private let manageSubscriptionsURL = URL(string: "https://apps.apple.com/account/subscriptions")!
 
     private let plans = [
         MemberPlan(id: "yearly", name: "年度会员", price: "¥88", period: "年", featured: true,
@@ -383,6 +384,15 @@ struct MemberPricingView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
+        .manageSubscriptionsSheet(isPresented: $showSubscriptionManagement)
+        .onChange(of: showSubscriptionManagement) { wasPresented, isPresented in
+            guard wasPresented && !isPresented else { return }
+            subscriptionManagementRefreshID += 1
+        }
+        .task(id: subscriptionManagementRefreshID) {
+            guard subscriptionManagementRefreshID > 0 else { return }
+            await settingsViewModel.refreshMemberFromLocalEntitlements(synchronize: false)
+        }
         .onChange(of: settingsViewModel.hasCloudSession) { _, hasSession in
             guard hasSession else { return }
             handleMemberLoginSucceeded()
@@ -422,7 +432,7 @@ struct MemberPricingView: View {
                     }
                 }
                 if purchaseNoticeIncludesSubscriptionManagement {
-                    subscriptionManagementLink(title: "管理原有订阅")
+                    subscriptionManagementButton(title: "管理原有订阅")
                 }
                 Button("知道了") { purchaseNotice = nil }
                     .font(.system(size: 15, weight: .semibold))
@@ -669,7 +679,7 @@ struct MemberPricingView: View {
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(AppColors.text.opacity(0.9))
 
-            subscriptionManagementLink(title: "在 App Store 管理订阅")
+            subscriptionManagementButton(title: "在 App Store 管理订阅")
 
             Text("更改月度或年度方案、取消自动续费，均在 App Store 中操作。")
                 .font(.footnote)
@@ -680,10 +690,16 @@ struct MemberPricingView: View {
         }
     }
 
-    private func subscriptionManagementLink(title: String) -> some View {
-        Link(destination: manageSubscriptionsURL) {
+    private func subscriptionManagementButton(title: String) -> some View {
+        Button {
+            guard !isPurchasing, !showSubscriptionManagement,
+                  !showMemberLoginSheet, !showLifetimePurchaseConfirmation else { return }
+            purchaseNotice = nil
+            purchaseNoticeIncludesSubscriptionManagement = false
+            showSubscriptionManagement = true
+        } label: {
             HStack(spacing: 10) {
-                Label(title, systemImage: "arrow.up.right.square")
+                Label(title, systemImage: "creditcard")
                     .font(.subheadline.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
@@ -696,7 +712,8 @@ struct MemberPricingView: View {
             .padding(.vertical, 4)
             .background(AppColors.panelStrong.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
         }
-        .disabled(isPurchasing)
+        .buttonStyle(.plain)
+        .disabled(isPurchasing || showSubscriptionManagement || showMemberLoginSheet || showLifetimePurchaseConfirmation)
     }
 
     private var lifetimeUpgradeSection: some View {
@@ -770,7 +787,7 @@ struct MemberPricingView: View {
                 .font(.footnote)
                 .foregroundStyle(AppColors.subtext)
                 .fixedSize(horizontal: false, vertical: true)
-            subscriptionManagementLink(title: "检查原有订阅")
+            subscriptionManagementButton(title: "检查原有订阅")
             restorePurchaseButton
         }
     }
