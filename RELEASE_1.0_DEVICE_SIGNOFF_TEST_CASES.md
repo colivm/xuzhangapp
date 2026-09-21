@@ -67,8 +67,8 @@
 
 ## 七、封版签收表
 
-- 生产分支/commit：
-- 生产包版本/Build：
+- 生产分支/commit：`xuzhang1.0-release-2026@77b90a33f756230df157bae8701cf153eae477b2`（2026-09-21 固定，见第 8.10 节）
+- 生产包版本/Build：1.0 (10)；实际 Archive 的 commit 必须等于上面固定值，不等即为无效候选
 - 测试设备与系统：
 - PHOTO-01～PHOTO-10：`通过 / 失败 / 未运行`
 - FIX-001/FIX-002：`通过 / 失败 / 未运行`
@@ -87,7 +87,7 @@
 ### 8.1 本次基线与证据差距
 
 - 当前测试分支：`feature/xuzhangapp-staging@784c954`，产品修复提交为 `4a27e6e`，后一个提交仅为交付记录。
-- 当前生产分支：`xuzhang1.0-release-2026@1a3311c`，尚不包含这次首页滑动/删除与情绪候选入口修复；不能用旧生产包验收新修复。
+- 当前生产分支（本节记录时）：`xuzhang1.0-release-2026@1a3311c`，尚不包含这次首页滑动/删除与情绪候选入口修复；不能用旧生产包验收新修复。**此值已被第 8.10 节取代。**
 - 两套完整 Windows 门禁及四专项已在第 167 节交付时分别通过，代码此后未改变，当前只复核原证据，不把重复运行作为新的验收进展。生产检查使用的是“真实生产配置＋五个修复文件”的隔离副本，不等于生产分支已同步。
 - 日志：`C:/Users/yf/AppData/Local/Temp/xuzhang-home-delivery-8ba1543971174b31a3e210607ef7f6f3/`。staging Debug/Release 含 STAGING，production 无 STAGING，配置与原门禁规则未改。
 - 最终生产候选须在获授权同步后固定 commit/Archive/Build，再单独完整检查实际测试与生产候选；不得整分支合并覆盖两套配置，不得因旧日志通过跳过最终产物检查。
@@ -161,7 +161,7 @@ Windows 源码门禁及新增 URLProtocol/XCTest 夹具不模拟 iOS 系统授�
 本节为会员升级提交前的复核快照；后续测试分支交付见总台账第 184 节。代码推送不等于 TestFlight 已更新，新流程仍须在包含该提交的实际 Build 上签收。
 
 - 已有证据：用户再次明确沙盒账号订阅购买正常；台账第 174/178 节亦已记录生产配置 TestFlight 的 Sandbox 购买、同账号恢复和加速到期正常，不再要求重复证明相同构建上的基础路径。第 182 节永久升级代码与完整 Windows 门禁已完成，不等于新入口和新恢复选择流程已经进入用户所测构建。
-- 最终候选：只读 `git ls-remote` 核对远端测试分支为 `7ada3f5`、生产分支为 `b60bf71`。JWS 验签及首次定位/联网备份反馈修复在测试分支，尚未定向交付生产；独立首页滑动补丁也存在分支差异。永久升级仍在工作区未提交。需明确本版纳入的补丁后固定生产 commit、实际 Archive/Build 与后端版本，保留生产/测试配置隔离；本文件历史 Build 10 不能代替最终产物核对。
+- 最终候选：只读 `git ls-remote` 核对远端测试分支为 `7ada3f5`、生产分支为 `b60bf71`。JWS 验签及首次定位/联网备份反馈修复在测试分支，尚未定向交付生产；独立首页滑动补丁也存在分支差异。永久升级仍在工作区未提交。需明确本版纳入的补丁后固定生产 commit、实际 Archive/Build 与后端版本，保留生产/测试配置隔离；本文件历史 Build 10 不能代替最终产物核对。**本节快照已被第 8.10 节取代：上述补丁已于 2026-09-21 同步进生产分支。**
 - 支付交付：Apple JWS 签名链已实现并通过本地测试，不能再写成“尚未实现”；仓库尚无其线上部署/真实验签证据。部署前需生产 `APPLE_APPLE_ID`、根证书及依赖就绪，并验证新后端的真实交易验单。历史 Production 401 尚无独立授权排查闭环，沙盒成功不自动证明 Production 授权；当前未重新请求线上接口，不断言现服务仍返回 401。
 - 新会员流程：按 `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 第 8.2.1 节验订阅转永久、确认取消/失败/pending、登录后继续、永久和订阅共存恢复、跨叙账账号拒绝后继续核对其他合法候选、旧订阅手动取消不影响永久、主题入口/价格重试。基础沙盒购买已过的结论保留，只补新变化及未覆盖边界。
 - 最终包验收：当前候选的 Debug/Release、完整 XCTest/Archive、图片/备份恢复/双设备同步、连续记账、首次定位/弱网失败提示、1,000/5,000 条性能及大字/VoiceOver仍缺回填记录。此为证据缺项，不表示用户从未测试或已知功能失败；已完成项目补实际 Build/设备/结果即可，不因旧表 NOT_RUN 全量宣称失败。
@@ -204,4 +204,19 @@ Windows 源码门禁及新增 URLProtocol/XCTest 夹具不模拟 iOS 系统授�
 | 备注与金额往返切换；输入后立即选分类、改时间、点完成或保存 | 焦点只在当前输入框；主动结束后不再自动弹起；最后文字不丢失，保存再打开一致 | 待复验 |
 | 小屏记账页点“自己写一句”，中文候选栏/中英文键盘切换、收起重开，再切金额 | 整个备注输入框自动位于键盘上沿以上；高度变化后仍可见、不来回跳动；收起及切金额后恢复原区域，Tab 栏不被顶起 | 待复验 |
 
-最后一行对应台账第 191 节局部键盘避让补充。记录新 Build、设备/iOS 与结果；Mac 执行 `CommittedRecordNoteFieldTests` 及完整 XCTest。Windows 源码门禁及键盘几何测试不能证明真实键盘或中文输入法已通过。
+最后一行对应台账第 191 节局部键盘避让补充。记录新 Build、设备/iOS 与结果；Mac 执行 `CommittedRecordNoteFieldTests`（定义在 `NativeDemoAppTests/StateRegressionTests.swift` 内）及完整 XCTest。Windows 源码门禁及键盘几何测试不能证明真实键盘或中文输入法已通过。
+
+### 8.10 2026-09-21 生产候选基线固定（本节取代 8.1、8.6 中的分支/commit 快照）
+
+2026-09-21 已将测试分支同步进生产分支。本节是后续一切真机签收的唯一候选基线；**在此之前按 8.1/8.6 旧快照进行或计划的签收一律作废**，需在新候选上重做。
+
+- 生产候选分支/commit：`xuzhang1.0-release-2026@77b90a33f756230df157bae8701cf153eae477b2`（本地与远端一致，已用只读 `git ls-remote` 核对）。
+- 测试分支：`feature/xuzhangapp-staging@2aeb0157ad6f48904e836e2096221dcc4932a2da`。
+- 同步方式：以 `feature/xuzhangapp-staging` 合并进生产分支，合并提交 `77b90a3 Sync staging into production release branch`；16 处冲突全部取测试分支侧（生产侧为空或是同一功能的上一代实现）。相对原生产 `b60bf71`，净差异 48 个文件、+3172/−380，无删除。
+- 版本号：`Info.plist` 仍为 `CFBundleShortVersionString 1.0` / `CFBundleVersion 10`。**版本号未随本次同步变更，因此不能凭版本号区分新旧候选**，必须按 commit 核对（见第一节 BUILD-01 与签收表）。
+- 生产配置隔离（本次同步的硬约束，已核对）：`project.pbxproj` 保持生产侧，不含 `SWIFT_ACTIVE_COMPILATION_CONDITIONS = "STAGING $(inherited)"`；`AppSettings.swift` 的 `#if STAGING` 在生产构建下编译走 `#else`，请求 `https://api.xuzhangapp.com`。天气/定位默认值已确认为 `false`（`AppSettings.default` 与 Codable 解码回退两处一致）。
+- 本次同步带入生产分支的用户可见变化：Apple JWS 签名链验签（后端）、IAP 环境门禁与篡改反向测试、封面模板按场景种类数解锁、`Info.plist` 位置权限文案更新、首次定位/联网备份修复、备注输入 UIKit 焦点与键盘避让修复。
+- 已在 Windows 侧执行并通过：`record_continuous_intent` / `quick_note` / `amount_input` / `home_swipe` / `first_use_permissions_sync` / `record_preview_feedback` 六项回归，全部 lint 专项，`validate_release_gate.py`，以及后端九个 `verify-*.mjs`（含新增 `verify-iap-jws-signature`）。**这些都不能替代 Xcode 编译、XCTest、Archive、StoreKit 真机交易与 Instruments。**
+- 尚未执行（本机无 Swift 工具链）：Debug/Release build、`NativeDemoAppTests` 全部 XCTest（含本次新增的 `LaunchCoverTemplateTests` 场景闸门用例与 `StateRegressionTests` 键盘避让用例）、生产 Archive 与实际产物的 commit/域名核对。
+
+签收前必须先确认：待测包的实际 commit 等于 `77b90a3`，且该构建的请求只到生产域名。两者任一不符，本轮签收无效。
