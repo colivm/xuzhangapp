@@ -603,8 +603,8 @@ enum LaunchCoverTemplateCatalog {
         factPack: CoverFactPack
     ) -> CoverContentAllocationRequest {
         let descriptor = descriptorsByID[templateID] ?? descriptorsByID[.journal]!
-        let mediaCaptionAtomIDs = Dictionary(
-            uniqueKeysWithValues: factPack.media.compactMap { media in
+        let mediaCaptionAtomIDs: [UUID: String] = Dictionary(
+            uniqueKeysWithValues: factPack.media.compactMap { media -> (UUID, String)? in
                 guard let caption = media.caption else { return nil }
                 return (media.id, caption.id)
             }
