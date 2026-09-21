@@ -24,6 +24,7 @@ struct LegacyWeeklyCoverMedia: @unchecked Sendable {
         self.id = id
         self.evidenceItemIDs = evidenceItemIDs
         self.image = image
+        self.caption = caption
         self.privacyRisk = privacyRisk
         self.allowsHero = allowsHero
         self.requiresAnalysisForHero = requiresAnalysisForHero
