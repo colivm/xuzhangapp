@@ -338,7 +338,9 @@ enum LegacyWeeklyCoverAdapter {
             String(source.payload.recordCount),
             String(recordedDayCount),
             safeMedia.map { $0.id.uuidString }.joined(separator: "|"),
-            safeMedia.map { "\($0.id.uuidString):\($0.caption ?? \"\")" }.joined(separator: "|"),
+            safeMedia.map { media in
+                [media.id.uuidString, media.caption ?? ""].joined(separator: ":")
+            }.joined(separator: "|"),
             safeMedia.map { $0.analysis?.stableSignature ?? "analysis-unavailable" }
                 .joined(separator: "|"),
             "cover-media-analysis-v\(CoverMediaAnalysisRules.currentVersion)",

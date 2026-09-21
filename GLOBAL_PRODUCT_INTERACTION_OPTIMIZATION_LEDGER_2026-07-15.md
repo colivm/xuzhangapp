@@ -6033,3 +6033,4 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 修改文件：`NativeDemoApp/CoverEngine/Flow/LegacyWeeklyCoverAdapter.swift`、`NativeDemoApp/CoverEngine/Rendering/CoverCanvasRoot.swift`、`NativeDemoApp/CoverEngine/Templates/LaunchCoverTemplates.swift`、`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`NativeDemoAppTests/LaunchCoverTemplateTests.swift`，以及本台账。
 - 代码验证：`git diff --check` 通过；`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 通过，结果为 `release_repository_gate: OK`（保留既有 7 条软性文案提示）。
 - 当前状态：`CODE_DONE`。剩余风险：本环境没有 Xcode/Swift 工具链，尚未完成 Swift 编译、XCTest、窄屏/大字和 iPhone 真机视觉验收；推送的是源码提交，不代表测试包已更新。下一步使用包含本提交的测试包验证 0/1/2/3 张普通生活照片、用户备注、无备注、票据/截图、长文、导出一致性和多模板裁切。
+- 编译修复（2026-09-21）：稳定指纹中的 Swift 字符串插值误用了转义双引号，导致 `Unterminated string literal` 及后续作用域级联错误；已改为无嵌套转义的数组拼接，未改变指纹字段含义。修复后 `git diff --check` 与 Windows 发布门禁再次通过，仍待 macOS/Xcode 编译和真机验收。
