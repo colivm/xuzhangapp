@@ -5999,3 +5999,37 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 提交文件：`NativeDemoApp/Views/RecordView.swift`、`RecordEditSheet.swift`、`FocusedRecordEditor.swift`、`SettingsView.swift`，`NativeDemoAppTests/StateRegressionTests.swift`，`scripts/record_continuous_intent_regression.py`，两份 RELEASE 签收/门禁文档和本台账，共 9 文件。仅显式暂存这些路径；用户 `backend/.env.staging.example` 和全部未跟踪素材、脚本、输出、tmp 保留且不提交。
 - 检查与交付：提交前核对真实远端测试分支 `96c3ee70fecea9845f23744f1caf0e4adb6ace7a`，生产分支 `b60bf71f8d90e09d9e20f735bddda055eebfc1da`。代码和测试自第 191 节完整 Windows 门禁通过后未变，沿用 `tmp/record-note-keyboard-gate-20260920.log` 的 `release_repository_gate: OK`（原有 7 条文案软提示），不重复无变化全量测试；执行最终差异/暂存范围及 `git diff --check` 核对。普通提交后显式推送测试分支，再核对真实远端提交，最终 hash 和推送结果在本轮答复记录。
 - 剩余风险与下一步：此前各节“未提交推送”为本次授权前快照，本次不打包或上传 TestFlight、不部署、不更改生产分支。Windows 无 Swift/Xcode，5 项新增 XCTest、Debug/Release 编译与第 8.9 节真机流程仍待新 Build 验收；推送不代表用户设备上的包已经包含修复。下一步用包含本次提交的包验证自动聚焦、连续删字、键盘上方完整可见与会员入口原名。
+
+### 193. 用户 16 项场景整体走查未发现阻断（2026-09-21）
+
+- 用户反馈：16 项简化场景已大致走查一遍，目前没有发现阻断问题。该证据记录为整体 smoke 结果，不把未提供逐项结果、Build、设备/iOS、录屏和失败注记的项目直接标记 `VERIFIED`。
+- 处理结论：已知的记账焦点/键盘问题和会员入口修复继续按新提交 `32a7c33` 进入后续包验收；不要求用户无目的重复已走过的场景。后续若出现具体失败，按对应场景重新打开定向任务。
+- 下一项：按封版收口顺序检查最终候选包、Xcode/XCTest 与真机证据、生产 Apple 验单/JWS 部署配置和审核账号；其中生产 401/线上密钥与最终包属于外部发布闭环，不在没有运行态证据时臆改代码或自动同步生产。
+
+### 194. 周记分享模板数量与带图模板筛选诊断（2026-09-21）
+
+- 范围：只读核对周记分享图模板目录、分享页动态资格、图片候选和票据/截图安全过滤；不修改模板数量、图片角色、周记叙事或分享 UI。
+- 结论：当前模板目录共 20 套，来自 `LaunchCoverTemplateCatalog.orderedTemplateIDs` 与 `CoverTemplateID`；分享页通过 `manuallyAvailableTemplateIDs` 按本周数据动态显示可用子集。准备阶段最多取 3 个 `memoryAnchors`，因此目录总数不等于当前用户能看到的数量。
+- 带图账单未出现带图模板的主要原因：分享样式层会排除 `.receipt`；收据/发票/支付截图还会被标记为 `receiptOrScreenshot`、禁止作为 Hero，并由适配器过滤。普通图片也必须先进入周记 `memoryAnchors`（候选分数、同账单/日期/商户去重、每周最多 3 张）、图片可读且通过 `isHeroEligible`，需要 Hero 的模板还必须有主叙事证据绑定。
+- 证据文件：`NativeDemoApp/CoverEngine/Templates/LaunchCoverTemplates.swift`、`NativeDemoApp/CoverEngine/Models/CoverContracts.swift`、`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`NativeDemoApp/Services/PhotoMemoryPromptPolicy.swift`、`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoApp/CoverEngine/Flow/LegacyWeeklyCoverAdapter.swift`、`NativeDemoAppTests/LaunchCoverTemplateTests.swift`。历史上 1.0 首发为 6 套，提交 `8d48e33` 扩展为当前 20 套。
+- 验证：只读源码与测试断言核对完成；未修改产品代码、未运行或重跑 Xcode/真机，不把本次诊断标为模板问题已修复。下一步如用户确认是普通生活照片仍被排除，再针对该账单记录的 `memoryAnchorRole`、候选分数、图片引用可读性和 `isHeroEligible` 做定向复现。
+
+### 195. 周记分享图生活感与表达层级方案评审（2026-09-21）
+
+- 范围：只评审当前 20 套 CoverEngine 的生活感、信息层级、图片上下文和排版精致度；不启动实现、不改变账单事实、隐私过滤、会员、分享权限或既有模板资格。
+- 主要发现：照片已有 `photoCaption`/媒体说明能力，但适配器当前传入 `caption: nil`，模板分配也未绑定媒体说明，因此图片更像装饰而不是一次具体生活记录；模板正文普遍复用 `lead/support/mark/timeline` 层级，底部 Footer 又固定平铺品牌、记录数、记录日和照片数，20 套模板容易变成“换皮肤”。
+- 建议优先级：1）为主图或一张辅助图补一条安全短说明（日期、用户标题/备注或中性分类事实）；2）按“照片先说话、文字先说话、照片与节奏并列”重分三类表达角色；3）降低 Footer 和照片数的视觉权重；4）长文优先换布局而不是缩小字体；5）辅助图按模板减少统一 `.fill` 裁切和重复圆角阴影。
+- 推荐方向：内部保留 20 套目录，但用户入口按 4～6 个表达家族呈现。核心三种构图为“一周一幕”（1 张代表图）、“生活拼页”（2～3 张图＋日期/事实标注）、“节奏手札”（无安全照片时用记录节奏和时间线承接）。所有文字只能来自已有账单/周记事实，不补写情绪、地点或因果。
+- 证据文件：`NativeDemoApp/CoverEngine/Flow/LegacyWeeklyCoverAdapter.swift`、`NativeDemoApp/CoverEngine/Templates/LaunchCoverTemplates.swift`、`NativeDemoApp/CoverEngine/Rendering/CoverCanvasRoot.swift`。本轮只读审阅完成，未修改产品代码、未运行 Xcode/真机；下一步需单独建立视觉表达实现任务，并在 `FLOW-73`～`FLOW-77` 真机签收后验证 0/1/2/3 图、长文、窄屏、大字和多主题。
+
+### 196. SHARE-VISUAL-ELEMENTS-01：现有模板生活元素与表达层级增强（2026-09-21）
+
+- 状态：`IN_PROGRESS`。用户明确不增加模板数量，只丰富现有模板元素，减少组件拼装感，提升生活感、精致度和表达感。
+- 允许范围：仅 `CoverEngine` 的照片说明传递、媒体说明布局、模板文字/照片层级、Footer 层级、图片处理细节及对应回归；保留 20 个模板 ID、现有动态资格、照片隐私/收据过滤、账单事实和分享权限。
+- 冻结边界：不新增模板、不改变周记/月章正文和事实来源、不生成账本外情绪/地点/因果、不降低 Hero/隐私门槛、不改会员、额度、同步、相册或旧分享实现退役边界。
+- 第一阶段目标：让 `SummaryMemoryAnchor.caption` 进入 `MediaDescriptor.caption` 并在主图/辅助图附近按模板安全显示；减少 Footer 平铺感；长文优先选择稳定布局；辅助图减少统一圆角阴影和无差别裁切。
+- 验收：0/1/2/3 张可用图片、收据/截图、长文、无备注、普通生活照片、窄屏和大字下，图片有日期/安全短说明时才显示说明，说明不重复主标题、不泄露金额/敏感文本，模板数量与资格不变；Windows 回归通过后记录 `CODE_DONE`，Xcode/真机前不标 `VERIFIED`。
+- 本轮实现：`SummaryMemoryAnchor.caption` 现在按安全规则生成日期与用户备注/既有场景标签，进入 `MediaDescriptor.caption`；模板分配和布局为已有照片位置增加说明层，渲染时以轻量渐变覆盖显示；新增照片说明传播与版面绑定回归，未增加模板 ID、未改变照片资格或票据过滤。
+- 修改文件：`NativeDemoApp/CoverEngine/Flow/LegacyWeeklyCoverAdapter.swift`、`NativeDemoApp/CoverEngine/Rendering/CoverCanvasRoot.swift`、`NativeDemoApp/CoverEngine/Templates/LaunchCoverTemplates.swift`、`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`NativeDemoAppTests/LaunchCoverTemplateTests.swift`，以及本台账。
+- 代码验证：`git diff --check` 通过；`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 通过，结果为 `release_repository_gate: OK`（保留既有 7 条软性文案提示）。
+- 当前状态：`CODE_DONE`。剩余风险：本环境没有 Xcode/Swift 工具链，尚未完成 Swift 编译、XCTest、窄屏/大字和 iPhone 真机视觉验收；推送的是源码提交，不代表测试包已更新。下一步使用包含本提交的测试包验证 0/1/2/3 张普通生活照片、用户备注、无备注、票据/截图、长文、导出一致性和多模板裁切。

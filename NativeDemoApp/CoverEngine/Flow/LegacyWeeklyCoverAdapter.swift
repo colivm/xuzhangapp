@@ -5,6 +5,7 @@ struct LegacyWeeklyCoverMedia: @unchecked Sendable {
     let id: UUID
     let evidenceItemIDs: [UUID]
     let image: UIImage
+    let caption: String?
     let privacyRisk: CoverMediaPrivacyRisk
     let allowsHero: Bool
     let requiresAnalysisForHero: Bool
@@ -14,6 +15,7 @@ struct LegacyWeeklyCoverMedia: @unchecked Sendable {
         id: UUID,
         evidenceItemIDs: [UUID],
         image: UIImage,
+        caption: String? = nil,
         privacyRisk: CoverMediaPrivacyRisk,
         allowsHero: Bool,
         requiresAnalysisForHero: Bool = false,
@@ -302,7 +304,17 @@ enum LegacyWeeklyCoverAdapter {
                     ? .heroEligible
                     : .secondaryOnly,
                 privacyRisk: .safe,
-                caption: nil,
+                caption: media.caption.flatMap { text in
+                    let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !normalized.isEmpty else { return nil }
+                    return CertifiedLabel(
+                        id: "cover.photo-caption.\(media.id.uuidString)",
+                        kind: .photoCaption,
+                        text: normalized,
+                        semanticKey: "photo-caption:\(media.id.uuidString)",
+                        evidenceItemIDs: unique(media.evidenceItemIDs)
+                    )
+                },
                 analysis: media.analysis
             )
         }
@@ -326,6 +338,7 @@ enum LegacyWeeklyCoverAdapter {
             String(source.payload.recordCount),
             String(recordedDayCount),
             safeMedia.map { $0.id.uuidString }.joined(separator: "|"),
+            safeMedia.map { "\($0.id.uuidString):\($0.caption ?? \"\")" }.joined(separator: "|"),
             safeMedia.map { $0.analysis?.stableSignature ?? "analysis-unavailable" }
                 .joined(separator: "|"),
             "cover-media-analysis-v\(CoverMediaAnalysisRules.currentVersion)",

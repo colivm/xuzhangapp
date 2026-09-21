@@ -226,6 +226,30 @@ final class LaunchCoverTemplateTests: XCTestCase {
         XCTAssertNotEqual(receipt.recipe.template.templateID, .heroStory)
     }
 
+    func testPhotoCaptionsBecomeEvidenceBoundOverlayPlacements() throws {
+        let input = try LegacyWeeklyCoverAdapter.prepareSession(
+            from: makeSource(
+                variantID: "warmLight",
+                mediaCount: 1,
+                caption: "7月17日 · 见面",
+                recordedDayCount: 4
+            )
+        ).previewRenderInput
+
+        let caption = try XCTUnwrap(input.allocation.mediaCaptions.values.first)
+        XCTAssertEqual(caption.role, .photoCaption)
+        XCTAssertEqual(caption.text, "7月17日 · 见面")
+
+        let placement = try XCTUnwrap(
+            input.layout.bodyAtomPlacements.first {
+                $0.atomID == caption.id && $0.textRole == .caption
+            }
+        )
+        let mediaPlacement = try XCTUnwrap(input.layout.mediaPlacements.first)
+        XCTAssertEqual(placement.frame, mediaPlacement.frame)
+        XCTAssertTrue(input.recipe.media.map(\.mediaID).contains(mediaPlacement.mediaID))
+    }
+
     func testLongQuoteAndMinimalCopyFallBackToExpandedJournalLayout() throws {
         let longLead = String(repeating: "这一段真实生活仍然需要完整保留", count: 5)
         for variantID in ["appleMemories", "cleanTexture"] {
@@ -469,6 +493,7 @@ final class LaunchCoverTemplateTests: XCTestCase {
         allowsHero: Bool = true,
         privacyRisk: CoverMediaPrivacyRisk = .safe,
         leadText: String = "下班路上，也把这一刻留了下来",
+        caption: String? = nil,
         recordedDayCount: Int
     ) -> LegacyWeeklyCoverSource {
         let evidenceIDs = (0..<max(1, mediaCount)).map { index in
@@ -551,6 +576,7 @@ final class LaunchCoverTemplateTests: XCTestCase {
                 id: UUID(uuidString: String(format: "42000000-0000-0000-0000-%012d", index + 1))!,
                 evidenceItemIDs: [evidenceIDs[index]],
                 image: makeImage(index: index),
+                caption: index == 0 ? caption : nil,
                 privacyRisk: privacyRisk,
                 allowsHero: allowsHero
             )

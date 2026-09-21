@@ -603,11 +603,17 @@ enum LaunchCoverTemplateCatalog {
         factPack: CoverFactPack
     ) -> CoverContentAllocationRequest {
         let descriptor = descriptorsByID[templateID] ?? descriptorsByID[.journal]!
+        let mediaCaptionAtomIDs = Dictionary(
+            uniqueKeysWithValues: factPack.media.compactMap { media in
+                guard let caption = media.caption else { return nil }
+                return (media.id, caption.id)
+            }
+        )
         return CoverContentAllocationRequest(
             mastheadAtomIDs: descriptor.showsMasthead ? [CoverFactAtomID.period] : [],
             storyLeadAtomID: factPack.story.id,
             storySupportAtomID: descriptor.showsSupport ? factPack.support?.id : nil,
-            mediaCaptionAtomIDs: [:],
+            mediaCaptionAtomIDs: mediaCaptionAtomIDs,
             markAtomIDs: Array(factPack.marks.prefix(descriptor.maximumMarkCount)).map(\.id),
             timelineAtomIDs: descriptor.usesTimeline
                 ? Array(factPack.context.timelineLabels.prefix(4)).map(\.id)
@@ -771,7 +777,7 @@ enum LaunchCoverTemplateLayoutResolver {
         recipe: CoverRecipe,
         allocation: ContentAllocationPlan
     ) -> ResolvedCoverLayout {
-        let bodyPlacements: [ResolvedCoverAtomPlacement]
+        var bodyPlacements: [ResolvedCoverAtomPlacement]
         let mediaPlacements: [ResolvedCoverMediaPlacement]
         switch recipe.template.templateID {
         case .heroStory:
@@ -930,6 +936,10 @@ enum LaunchCoverTemplateLayoutResolver {
                 ]
             )
         }
+        bodyPlacements.append(contentsOf: mediaCaptionAtoms(
+            allocation: allocation,
+            mediaPlacements: mediaPlacements
+        ))
         let layoutFingerprint = CoverStableIdentity.fingerprint([
             recipe.recipeID,
             recipe.template.templateID.rawValue,
@@ -947,6 +957,24 @@ enum LaunchCoverTemplateLayoutResolver {
             bodyAtomPlacements: bodyPlacements,
             mediaPlacements: mediaPlacements
         )
+    }
+
+    private static func mediaCaptionAtoms(
+        allocation: ContentAllocationPlan,
+        mediaPlacements: [ResolvedCoverMediaPlacement]
+    ) -> [ResolvedCoverAtomPlacement] {
+        mediaPlacements.compactMap { mediaPlacement in
+            guard let caption = allocation.mediaCaptions[mediaPlacement.mediaID] else {
+                return nil
+            }
+            return ResolvedCoverAtomPlacement(
+                atomID: caption.id,
+                frame: mediaPlacement.frame,
+                textRole: .caption,
+                alignment: .leading,
+                lineLimit: 1
+            )
+        }
     }
 
     private static func heroStoryAtoms(
