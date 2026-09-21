@@ -74,7 +74,7 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>叙账使用本地天气，让记录更贴近当下情境。你可以在设置中关闭。</string>
+	<string>叙账仅在你开启天气互动后使用位置，获取当地天气和城市，为互动与记录补充场景。无需精确位置，拒绝不影响记账。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>叙账只会在你主动选择时，将故事图片保存到照片。</string>
 	<key>NSPhotoLibraryUsageDescription</key>

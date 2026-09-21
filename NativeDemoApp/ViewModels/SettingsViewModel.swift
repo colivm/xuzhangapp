@@ -188,10 +188,13 @@ final class SettingsViewModel: ObservableObject {
     var weatherCompanionEnabled: Bool {
         get { settings.weatherCompanionEnabled }
         set {
+            guard settings.weatherCompanionEnabled != newValue else { return }
             settings.weatherCompanionEnabled = newValue
             persist()
-            if newValue, settings.petCompanionEnabled {
-                WeatherCompanionService.shared.startBackgroundRefresh()
+            if newValue {
+                // This setter is reached by the explicit weather setting, not
+                // saving a record or enabling basic pet companionship.
+                WeatherCompanionService.shared.requestWhenInUseAndRefresh()
             } else {
                 WeatherCompanionService.shared.stopBackgroundRefresh()
             }
@@ -613,16 +616,27 @@ final class SettingsViewModel: ObservableObject {
         syncToCloud: Bool = true,
         showsMessage: Bool = false
     ) async {
+        let accountIDAtStart = settings.cloudUserId
+        let tokenAtStart = KeychainService.loadAccessToken()
+        let isCurrentAccount: @MainActor () -> Bool = {
+            !accountIDAtStart.isEmpty && !tokenAtStart.isEmpty && self.hasCloudSession
+                && self.settings.cloudUserId == accountIDAtStart
+                && KeychainService.loadAccessToken() == tokenAtStart
+        }
         do {
             let payloads = try await IAPService.shared.currentEntitlements(synchronize: synchronize)
-            guard let payload = bestLocalEntitlement(from: payloads),
-                  hasActiveLocalEntitlement(payload) else { return }
+            let activePayloads = payloads.filter { hasActiveLocalEntitlement($0) }
+            guard !activePayloads.isEmpty else { return }
             let currentHasAccess = settings.hasMemberAccess
-            guard hasCloudSession else { return }
+            guard isCurrentAccount(), !Task.isCancelled else { return }
             if syncToCloud {
-                do {
+                let result = await IAPEntitlementSelection.verifyFirstAvailable(in: activePayloads) { payload in
+                    guard isCurrentAccount() else { throw CancellationError() }
                     try await verifyIAPPurchase(payload, showsMessage: false)
-                } catch {
+                    guard isCurrentAccount() else { throw CancellationError() }
+                }
+                guard isCurrentAccount(), !Task.isCancelled else { return }
+                guard result.verifiedPayload != nil else {
                     if synchronize, showsMessage {
                         authMessage = "当前账号暂时没有可恢复的会员权益。请确认使用的是购买时的账号。"
                     }
@@ -633,6 +647,7 @@ final class SettingsViewModel: ObservableObject {
                 authMessage = "已检测到 App Store 会员权益，状态已恢复。"
             }
         } catch {
+            guard isCurrentAccount(), !Task.isCancelled, !(error is CancellationError) else { return }
             if synchronize, showsMessage {
                 authMessage = "暂时没恢复到本机会员状态，请稍后再试。"
             }
@@ -827,24 +842,6 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
-    private func bestLocalEntitlement(from payloads: [IAPPurchaseVerification]) -> IAPPurchaseVerification? {
-        payloads.sorted { lhs, rhs in
-            entitlementRank(lhs) > entitlementRank(rhs)
-        }
-        .first
-    }
-
-    private func entitlementRank(_ payload: IAPPurchaseVerification) -> Int {
-        let tierWeight: Int
-        switch payload.tier {
-        case .lifetime: tierWeight = 3_000_000_000
-        case .yearly: tierWeight = 2_000_000_000
-        case .monthly: tierWeight = 1_000_000_000
-        }
-        let expiry = Int(payload.expirationDate?.timeIntervalSince1970 ?? 0)
-        return tierWeight + expiry
-    }
-
     private func startSMSCooldown(_ seconds: Int) {
         smsCooldownTask?.cancel()
         smsCooldownRemaining = max(0, seconds)
@@ -881,6 +878,9 @@ final class SettingsViewModel: ObservableObject {
     }
 
     private func sendSMSMessage(for error: Error) -> String {
+        if let message = CloudNetworkFailureGuidance.message(for: error) {
+            return "验证码未发送。\(message)"
+        }
         guard let serviceError = error as? AuthServiceError,
               case AuthServiceError.badStatus(let code, let body) = serviceError else {
             return "验证码暂时没发出去，请检查手机号或稍后再试。"
@@ -902,6 +902,9 @@ final class SettingsViewModel: ObservableObject {
     }
 
     private func verifySMSMessage(for error: Error) -> String {
+        if let message = CloudNetworkFailureGuidance.message(for: error) {
+            return "登录未完成。\(message)"
+        }
         guard let serviceError = error as? AuthServiceError,
               case AuthServiceError.badStatus(let code, let body) = serviceError else {
             return "登录没有成功，请检查手机号和验证码后再试。"

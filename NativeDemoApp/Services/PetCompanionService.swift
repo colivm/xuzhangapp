@@ -373,10 +373,7 @@ final class PetCompanionService {
 
         let snapshot: WeatherSnapshot?
         if settings.weatherCompanionEnabled {
-            if !weatherService.hasLocationPermissionReady {
-                weatherService.requestWhenInUseAndRefresh()
-            }
-            snapshot = weather ?? weatherService.cachedSnapshot
+            snapshot = weatherService.hasLocationPermissionReady ? (weather ?? weatherService.cachedSnapshot) : nil
             weatherService.refreshWeatherInBackground(refreshGeo: false)
         } else {
             snapshot = nil
@@ -395,9 +392,6 @@ final class PetCompanionService {
 
         let snapshot: WeatherSnapshot?
         if settings.weatherCompanionEnabled {
-            if !weatherService.hasLocationPermissionReady {
-                weatherService.requestWhenInUseAndRefresh()
-            }
             snapshot = weatherService.cachedSnapshot
             weatherService.refreshWeatherInBackground(refreshGeo: false)
         } else {

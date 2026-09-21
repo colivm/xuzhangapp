@@ -11,6 +11,7 @@ const shared = {
   appleIssuerId: "issuer",
   appleKeyId: "key",
   appleBundleId: "com.xuzhang.app",
+  appleAppAppleId: "1234567890",
   applePrivateKeyPath: "/opt/xuzhang/secrets/AuthKey_key.p8",
   applePrivateKey: "",
   iapProductIds: { monthly: "monthly", yearly: "yearly", lifetime: "lifetime" },

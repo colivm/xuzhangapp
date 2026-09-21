@@ -22,11 +22,21 @@ REQUIRED = {
         "MembershipDetailPresentationPolicy",
         "memberDataBoundarySection",
         "具体体验次数只在对应入口显示",
+        "订阅不会自动取消",
+        "不会自动抵扣或退款",
+        "取消原订阅不影响永久权益",
+        'subscriptionManagementButton(title: "检查原有订阅")',
+        'subscriptionManagementButton(title: "在 App Store 管理订阅")',
+        'subscriptionManagementButton(title: "管理原有订阅")',
+        ".manageSubscriptionsSheet(isPresented: $showSubscriptionManagement)",
+        "IAPEntitlementSelection.verifyFirstAvailable(in: payloads)",
     ),
     "NativeDemoApp/Views/SettingsView.swift": (
         "省力记：OCR 连续导入与批量补记",
         "长期回望：今日回放、周记与月章",
         "完整生活场景与生活线索",
+        'Label("升级永久会员", systemImage: "crown.fill")',
+        'Text("续费或升级")',
     ),
 }
 
@@ -59,6 +69,32 @@ def main() -> int:
     computation_scope = pricing[computation_start:] if computation_start >= 0 else ""
     if "membershipPresentationPolicy" in computation_scope:
         print("MemberPricingView.swift: view presentation state leaked into archive computation scope")
+        return 1
+    login_start = view_scope.find("private func handleMemberLoginSucceeded()")
+    login_end = view_scope.find("private func handleMemberLoginSheetDismissed()", login_start)
+    if login_start < 0 or login_end < 0:
+        print("MemberPricingView.swift: cannot locate login continuation scope")
+        return 1
+    login_scope = view_scope[login_start:login_end]
+    if "if isMember {" in login_scope:
+        print("MemberPricingView.swift: login must not discard upgrade/restore intents solely for membership")
+        return 1
+    for automatic_action in ("handlePurchase(", "restorePurchases(", "continueMemberActionAfterLogin("):
+        if automatic_action in login_scope:
+            print("MemberPricingView.swift: login success must wait for an explicit continuation action")
+            return 1
+    confirmation_wiring = (
+        '.alert("开通永久会员", isPresented: $showLifetimePurchaseConfirmation)',
+        "handlePurchase(plans[2], confirmsLifetimePurchase: true)",
+        "if tier == .lifetime {",
+        "showLifetimePurchaseConfirmation = true",
+    )
+    for value in confirmation_wiring:
+        if value not in view_scope:
+            print(f"MemberPricingView.swift: lifetime purchase confirmation is disconnected `{value}`")
+            return 1
+    if "apps.apple.com/account/subscriptions" in view_scope:
+        print("MemberPricingView.swift: subscription management must use the native StoreKit sheet")
         return 1
     print("membership_value_lint: OK")
     return 0

@@ -5331,49 +5331,50 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 - 后续配置补充：新增 `ops/nginx/staging-api.xuzhangapp.com.conf`，与生产反代保持 HTTPS、安全响应头和隐藏 Express 标识一致；已同步到服务器并通过 `nginx -t`、staging HTTPS 响应头检查。
 - 门禁补充：`validate_release_gate.py` 现在还检查生产/预发布 `.env` 模板的 endpoint 与 `NODE_ENV` 配对，避免仓库门禁再次对环境配置失明。
-- 分支同步复核（2026-09-16）：`feature/xuzhangapp-staging` 已推送并更新到 `f3210b9`；服务器 `/opt/xuzhang/xuzhangapp-staging` 的 HEAD 已同步到同一提交，PM2 staging 服务保持 8791/8788。服务器工作区仍保留历史换行差异，未覆盖 `.env` 配置。
-- 生产分支切换复核（2026-09-16）：服务器 `/opt/xuzhang/xuzhangapp` 的 `HEAD`/当前分支已切换为 `xuzhang1.0-release-2026`，提交为 `e939ac1 record staging branch synchronization`；仅更新 Git 引用，保留生产工作文件与 `.env`。PM2 `backend`/`ai-proxy` 均在线，`https://api.xuzhangapp.com/health` 返回 `ok:true`，生产 `.env` 仍为 `NODE_ENV=production`、8790、Apple Production endpoint。
-- Redis 隔离补充（2026-09-16）：staging `/opt/xuzhang/xuzhangapp-staging/backend/.env` 已切换为 `REDIS_URL=redis://127.0.0.1:6379/1`、`REDIS_KEY_PREFIX=xuzhang-staging`；生产继续使用默认 DB 0 与 `xuzhang` 前缀。修改前备份为 `/opt/xuzhang/backups/xuzhangapp-staging-env-before-redis-20260916-130658.bak`。重启 `backend-staging` 并执行 `pm2 save` 后，staging HTTPS `/health` 正常，Redis DB0/DB1 当前均为空。
-- 服务器工作区清理复核（2026-09-16）：生产与 staging 均先打包备份，再执行 `git reset --hard HEAD` 清除历史换行/暂存索引差异；未触碰被 `.gitignore` 忽略的环境文件。备份分别为 `/opt/xuzhang/backups/xuzhangapp-worktree-before-clean-20260916-133919.tar.gz` 与 `/opt/xuzhang/backups/xuzhangapp-staging-worktree-before-clean-20260916-134212.tar.gz`。两目录 `git status` 均干净（仅分支相对远端 ahead），生产和 staging 服务重启、`pm2 save` 及 HTTPS `/health` 均正常。
 
-### 141. IAP-SERVER-KEY-TYPE-FIX-01：App Store Server API 密钥类型纠正与 STAGING 编译条件落地（2026-09-16）
+### 141. RECENT-FIX-REVIEW-01：最近修复审查（2026-09-16）
 
-- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（服务器侧已验收；真机与生产真实购买待签收）。
-- 用户问题：TestFlight 内购后服务端验单失败 `APPLE_LOOKUP_FAILED`，Apple 返回 401。
-- 根因：`APPLE_KEY_ID=29236M72GY` 是 **App Store Connect API key**，不是 **App Store Server API key**。Apple 将两类密钥放在 Users and Access → Integrations 的两个独立分区，不可互换；`iss`/`kid`/`.p8` 三者自洽但类型错误，Apple 拒签 JWT → 401。
-- 关键判据（同一 `iss`、同一 `aud`，仅换 key）：旧 key 在 `api.appstoreconnect.apple.com/v1/apps` 返回 **200**、在 App Store Server API 返回 **401**；新 key `4VA2F2LZ9B` 在同一对照下 ASC API 返回 **401**、Sandbox 端点返回 **404**（`4040010 Transaction id not found`），即 JWT 已被 Apple 验签通过。两类 key 的通过/拒绝方向完全相反，构成类型判定证据。
-- 已排除假设（避免重复排查）：沙盒/生产地址指向错误（症状应为 404 而非 401）；环境隔离缺失；`APPLE_ISSUER_ID` 误填 Team ID；`APPLE_BUNDLE_ID` 为占位符；服务器时钟偏移；`.p8` 损坏或格式错误（257 字节、`BEGIN PRIVATE KEY`、EC P-256 PKCS#8）。
-- 服务器实施：
-  - 新密钥上传至 `/opt/xuzhang/secrets/AuthKey_4VA2F2LZ9B.p8`，权限 `600 root:root`，`md5 b8cd2e336098c1a755541f241bcfc67d` 与本地一致。
-  - 生产 `/opt/xuzhang/xuzhangapp/backend/.env` 与 staging `/opt/xuzhang/xuzhangapp-staging/backend/.env` 各改 2 行（`APPLE_KEY_ID`、`APPLE_PRIVATE_KEY_PATH`），`diff` 确认无其他改动；`APPLE_ISSUER_ID`、`APPLE_BUNDLE_ID`、`APPLE_APP_STORE_API_BASE_URL` 未动。修改前备份为两目录下 `.env.bak-20260916-iapkey`。
-  - `pm2 restart backend backend-staging` 并 `pm2 save`；生产/预发布 HTTPS `/health` 均 200；错误日志 mtime 早于本次重启，无新增错误。
-- 验收证据（服务器实测）：
-  - Sandbox：`tx=2000001191692986` 返回 **200** 且含真实 `signedTransactionInfo`（Apple JWS 签名交易信息），验单链路端到端跑通；`tx=1` 返回 404。
-  - Production：对 `tx=1`、`tx=9999999999999999`、`tx=2000001191692986` 均返回 **401 空 body**。对照实验显示伪造 key、错误 keyid、无 token 三种情况均返回带 `Unauthenticated` 消息的 401，与真 key 的空 body 401 形态不同，据此判断生产端点对"不存在的交易"返回裸 401，JWT 本身已被接受。**生产真实交易验单未验证**，需真实生产购买后确认。
-- STAGING 编译条件（内测包误连生产后端）：
-  - 现象：TestFlight 包请求进入生产链路（nginx `access.log` 中 `NativeDemoApp/371` 的 `/v1/iap/verify` 与 `/v1/account/me`），而 `/opt/xuzhang/xuzhangapp-staging` 的 `backend-staging-out.log` 仅 3 行启动日志、零业务请求，staging 库 `iap_transactions` 为 0 行。
-  - 根因：`feature/xuzhangapp-staging` 上 `AppSettings.swift` 已有 `#if STAGING` 分支，但 `ci_scripts/ci_pre_xcodebuild.sh` 仅 18 行、只写 `CFBundleVersion`，从未注入 `SWIFT_ACTIVE_COMPILATION_CONDITIONS`，编译条件从未生效，永远走 `#else` 指向生产。
-  - 修复：commit `08878a8`（已推送 origin），在 App target 的 Debug 与 Release 配置注入 `SWIFT_ACTIVE_COMPILATION_CONDITIONS = "STAGING $(inherited)"`；带 `$(inherited)` 是为保留项目级 `DEBUG` 标志，避免 target 级配置覆盖。仅 2 行改动，混合换行原样保留。
-  - 复核：`AppSettings.init(from:)` 末尾调用 `applyProductionBackendEndpoint()`，本地持久化的旧生产地址每次 decode 均被编译期常量覆盖，不存在旧值残留导致仍连生产的风险；全仓库仅 `AppSettings.swift:5` 一处 `#if STAGING`。
-- 取证缺口：nginx 使用 combined 日志格式，不记录 Host 头，且两个域名的 `access_log` 为同一文件，故无法从日志字面证明 `NativeDemoApp/371` 请求命中的是 `api.xuzhangapp.com` 而非 `staging-api.xuzhangapp.com`；该结论由 staging 零请求、CI 脚本缺失注入、staging 历史 `EADDRINUSE :::8790` 三条旁证推出。
-- 冻结边界：未改会员 Product ID、交易归属规则、价格、账单字段或服务端验单逻辑；第 1 步为纯凭证替换，第 2 步仅改构建设置。
-- 剩余风险与下一步：
-  - 需在 Xcode Cloud 确认 staging workflow 确实从 `feature/xuzhangapp-staging` 构建，否则 commit `08878a8` 不生效；已发出的 build 371 仍指向生产，需重出包。
-  - StoreKit Sandbox/Production 真实购买、恢复、过期、撤销与错环境验单仍未执行；生产 Apple JWS 签名链校验收据缺失。
-  - `.gitignore` 未覆盖 `*.p8` 与 `tmp/`，`tmp/iap-401-排查总结.md` 含 Issuer ID、Key ID 与服务器 IP，建议补规则（本条目未修改仓库配置）。
-  - 本地 `backend/.env` 仍指向旧 key `29236M72GY`，本地验单会继续 401（仅影响本机开发）。
-  - 遗留代码不一致：`backend/src/server.js:273` 读取 `decision.sandboxRebind`，但 `iapService.js:22` 的 `resolveIAPBindingDecision` 不返回该字段；PM2 `backend` 的 `exec cwd` 为 `/opt/xuzhang/xuzhangapp/ai-proxy` 而非 backend 目录。
+- 范围：审查 `08878a8` 及其前序 IAP 生产/预发布隔离提交；未修改产品代码，未改变既有 roadmap 状态。
+- 验证：`backend` 执行 `npm test` 全部通过；`python scripts/validate_release_gate.py --phase windows` 通过；静态检查覆盖 IAP endpoint 模板和纯函数门禁。
+- 发现与剩余风险：
+  1. 高风险：`NativeDemoApp.xcodeproj/project.pbxproj` 的 App target Debug、Release 均设置 `SWIFT_ACTIVE_COMPILATION_CONDITIONS = "STAGING $(inherited)"`；从 `feature/xuzhangapp-staging` 归档会让 Release/TestFlight 包指向 `staging-api.xuzhangapp.com`。当前 release gate 未检查分支与 Release 编译条件的关系。
+  2. 高风险：`backend/src/server.js` 用大小写敏感的原始 `NODE_ENV` 控制 `isProduction` 和启动门禁；`Production`、`PRODUCTION` 或带空格值会绕过生产校验并暴露开发路由，虽 `config.js` 的 validator 已做 trim/lowercase。
+  3. 中风险：IAP URL 校验只比较 HTTPS、hostname 和 `/` pathname，未拒绝端口、query/hash 等变体；后续 URL 拼接可能请求非官方 origin。应校验完整 origin。
+  4. 中风险：IAP 测试仅覆盖配置 endpoint 配对，未覆盖交易 payload environment、错环境响应、server 启动大小写变体和 URL 变体；生产/预发布 StoreKit 真机验单仍未完成。
+  5. 独立安全风险：`iapService.js` 仍只解码 JWS payload，未验证 Apple JWS 签名；本轮未扩大范围修复。
+- 工作区保护：保留既有 `backend/.env.staging.example` 修改以及未跟踪 `brand-assets/`、`output/`、`tmp/`、截图脚本和缓存文件。
+- 下一步：先修正 Release 配置隔离与 `NODE_ENV` 规范化，再补严格 URL/交易环境回归；完成 macOS/Xcode、StoreKit 双环境和真机验收前，`IAP-PRODUCTION-ROUTE-GATE-FIX-01` 继续保持 `CODE_DONE`。
 
+### 142. RECENT-FIX-REVIEW-01：审查补充与发布阻塞风险（2026-09-16）
 
+- 审查对象：IAP 环境门禁、STAGING 编译条件、持久化恢复收口；未修改代码或 roadmap 状态。
+- 验证证据：`backend/npm test` exit 0；`python scripts/validate_release_gate.py --phase windows` exit 0（`release_repository_gate: OK`）；恶意 endpoint 变体实测仍被 `validateIAPEnvironmentConfig` 接受（query/hash/8443）。
+- 发现（按优先级）：
+  1. **P1，正式收费/审核阻塞**：`backend/src/iapService.js` 只请求配置的 Production endpoint，并要求 JWS `environment == Production`；无 Sandbox fallback。`APP_STORE_IAP_SETUP.md` 第 7 节仍要求 Production 与 TestFlight Sandbox 按 Apple 返回正确路由，且当前台账记录 Production 真实交易尚未验通（已知测试仍为 401）。TestFlight/App Review 的 Sandbox 购买、恢复、过期和撤销矩阵未完成，不能把本修复标为可发布。
+  2. **P1，备份恢复兼容路径数据丢失**：`HomeViewModel.swift:3609-3615` 把旧 `items` 传为 fallback；`LedgerHomeItemsRepository.swift:180-186,215-222` 在 metadata manifest 缺失或激活失败时调用 `save(currentItemsForFallback)`，忽略 `changes`。旧格式/激活失败时可能显示恢复成功但实际仍写回旧账本；需补 legacy/failure XCTest。
+  3. **P1，配置占位符可启动**：`validateIAPEnvironmentConfig` 只检查非空，`.env.staging.example` 中 `<...>`、`YOUR_PASSWORD` 等占位值会通过 staging 启动门禁，首笔验单才失败。
+  4. **P2，环境变量大小写绕过门禁**：`server.js:53,453-458` 用原始大小写敏感的 `NODE_ENV` 控制生产/预发布分支；`Production`/`PRODUCTION` 已实测可绕过生产检查并启动 memory store，同时暴露 dev routes。应统一 trim/lowercase 后再分支。
+  5. **P2，URL 门禁过宽**：`config.js:65-79` 仅校验协议、hostname、pathname，允许 query/hash/非 443 端口；后续字符串拼接可能请求非官方 origin。应校验完整 origin、端口及无 query/hash。
+  6. **P2，内测分支发布误操作风险**：`08878a8` 在 App target Debug 与 Release 都定义 `STAGING`；对该分支归档会生成连 staging 的 Release 包。当前 gate 未检查分支与 Release 配置关系。该设置符合当前 staging 分支意图，但应改为独立 scheme/config 或增加发布门禁。
+  7. **独立安全缺口未被本轮修复**：`iapService.js` 仍只 Base64 解码 JWS，未验证 Apple 签名/证书链；生产验单不能仅凭 endpoint 和环境字段宣称安全。
+- 下一步：先修复备份 fallback、规范化 NODE_ENV、拒绝占位符和严格 URL；为 Production/TestFlight Sandbox 设计签名后路由并完成真实 StoreKit 矩阵，再进行 Xcode/真机签收。`IAP-PRODUCTION-ROUTE-GATE-FIX-01` 维持 `CODE_DONE`。
 
+### 143. RELEASE-GATE-BACKEND-RISK-FIX-01：发布门禁与后端风险修复（2026-09-16）
 
+- 状态：`NOT_STARTED` → `IN_PROGRESS`。
+- 范围：修复最近审查发现的 `NODE_ENV` 规范化绕过、Apple endpoint/占位符校验、生产包误用 STAGING 的发布门禁、备份恢复 fallback 忽略变更，以及 Production/TestFlight Sandbox 验单路由回归。
+- 冻结边界：不改变生产分支的正式 API 地址、会员 Product ID、价格、账单字段、交易归属和照片边界；不清理既有工作区修改。
+- 计划验证：backend npm tests、Windows release gate、Swift/XCTest 源码接线检查；当前 Windows 无 Xcode，不能宣称编译或真机已验证。
 
-### 142. RELEASE-GATE-BACKEND-RISK-FIX-01：实施结果（2026-09-16）
+### 144. RELEASE-GATE-BACKEND-RISK-FIX-01：实施结果（2026-09-16）
 
 - 状态：`IN_PROGRESS` → `CODE_DONE`。
-- 实施：统一 `NODE_ENV` 规范化；严格 Apple endpoint 与占位符校验；Production 交易不存在时安全回退 Sandbox 并按实际 endpoint 校验环境；修复 legacy/metadata 激活失败时备份恢复 fallback 忽略变更；发布门禁按分支检查 App target 的 `STAGING` 条件。
-- 验证：`backend/npm test`、`git diff --check`、`experience_static_check.ps1`、Windows release gate 均通过；生产分支实测 `staging=[]`。Windows 无 Xcode，Swift/XCTest、StoreKit 和真机验收仍待完成。
-- 剩余风险：Apple JWS 签名链、Production/TestFlight Sandbox 真实购买矩阵仍待完成。
+- 后端修复：统一 `NODE_ENV` trim/lowercase；严格限制 Apple Production/Sandbox origin；拒绝示例占位符；Production 仅在 Apple 明确交易不存在时安全回退 Sandbox，并按实际请求 endpoint 校验交易环境。
+- 持久化修复：legacy/metadata 激活失败 fallback 先将 upsert/delete changes 合并到当前快照再写入，避免恢复成功提示但账本仍为旧内容；新增 legacy 与失败路径 XCTest。
+- 发布门禁：`validate_release_gate.py` 解析 App target Debug/Release 编译条件；生产分支 `xuzhang1.0-release-2026` 禁止 `STAGING`，预发布分支 `feature/xuzhangapp-staging` 要求 Release 含 `STAGING`；新增 `--release-branch`/CI 分支识别。
+- 验证：`backend/npm test` 通过；`git diff --check` 通过；`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 通过并输出 `release_repository_gate: OK`；`experience_static_check.ps1` 通过。Windows 无 Xcode，Swift/XCTest、真实 StoreKit 和真机验收尚未执行。
+- 剩余风险：Apple JWS 签名链仍未实现；Production 真实购买与 TestFlight/App Review Sandbox 矩阵仍需 macOS/StoreKit 验证；正式发布必须显式使用生产分支并执行 Release gate。
+
 ### 146. RELEASE-CANDIDATE-AUDIT-01：1.0 封版审计（2026-09-16）
 
 - 结论：当前不可标记 `VERIFIED`，仅达到代码与 Windows 门禁完成。
@@ -5399,7 +5400,6 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 冻结边界：未改变图片引用格式、账单字段、备份包结构、云端照片边界、详情交互语义或会员/IAP；仍保留懒加载作为缩略图预热失败时的恢复路径。
 - Windows 验证：`git diff --check`、`experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 通过；后者输出 `release_repository_gate: OK`。当前环境无 Xcode，新增 XCTest 尚未运行。
 - 真机剩余风险：需验证首次保存后预热不阻塞交互、旧账本补齐缩略图、9 张图片首屏、快速翻页取消/重开、缺图恢复和 Allocations/Memory Graph；详情图片专项用例见 `RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md`。
-
 
 ### 149. DETAIL-IMAGE-LOAD-PERF-FIX-01：冷启动近期图片预热补充（2026-09-16）
 
@@ -5842,3 +5842,196 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 - 最终依赖复核补充：首次定向同步虽通过生产旧门禁，但逐文件比对发现生产未同步此前 `4a27e6e` 的情绪候选接线：`RecordEmotionCandidateSource` 已存在，`candidates()` 仍调用旧 `explicitMealAlternatives`，夜间通勤候选不可达。仅将 staging `8d5e368` 已验证的 `RecordDraftResolutionService.swift`、`StateRegressionTests.swift`、`scripts/meal_emotion_regression.py` 三文件同步到生产，闭合本轮第 171/176 节依赖；不扩入独立首页滑动或其专项。独立复核确认其余调用方/API 与下层语义文件一致，生产 HomeView 仅增加本次两处编辑意图回调。
 - 最终验证证据：上述三文件补齐后，五项专项再次全部通过；完整生产 Windows gate 重跑退出 0、`release_repository_gate: OK`。日志为 `C:/Users/yf/AppData/Local/Temp/xuzhang-record-intent-delivery-evidence/production-gate.log`，依赖日志及 `validated-git-blobs.json` 同目录。14 个验证文件的 Git blob 与 staging 完全相同（HomeView 保留生产独立首页实现，回调差异已逐行核对）；整个 backend 和工程树相对 `a6f0964` 无差异。staging 产品源码没有新增修改，继续对应第 176 节已通过的双配置证据。此补充通过普通提交推送交付，不改写已推送历史；最终远端头在交付答复中列出。原 `7b2e333` 的首次门禁证据不代替本次最终依赖闭合检查。
+
+### 178. IAP 临时诊断关闭准备与双分支隔离核对（2026-09-18）
+
+- 范围与状态：用户要求关闭临时诊断并核对测试/生产同步。本轮仅完成只读审计和关闭操作交接，线上关闭尚未执行/验收，不改变既有路线任务状态，不启动相邻优化。完整台账阅读沿用本线程证据；本轮唯一文件改动为本节记录。
+- 分支证据：fetch 后 staging `1c9dd86c5d3238afd2a53f8ab55b81ad210c956d`、production `b60bf71f8d90e09d9e20f735bddda055eebfc1da` 各与 origin 一致。两分支整个 backend tree 均为 `13d61e6d155f64c060e1bcfb0dd0e584ce8a375d`，IAP 路由、诊断、配置模板和测试无需再次同步；不是线上部署版本一致的证明。
+- 双环境检查：跨分支仅台账、project.pbxproj、HomeView.swift、home_swipe_regression.py 四文件有差异。工程差异仅测试 Debug/Release 的 STAGING 两条编译条件；两分支 bundle 均为 com.xuzhang.app，相同 AppSettings.swift 按 STAGING 分流 staging-api 与 api 域名。backend 的环境校验仍要求 production 主端点 Production、staging 主端点 Sandbox，生产 TestFlight 的匹配 Sandbox 交易由既有路由补丁处理，不把生产全局配置改为 Sandbox。业务域名、数据库、Redis 空间、JWT、端口和 PM2 服务继续隔离，不复制整份 .env。
+- 非环境差异：首页两文件的跨分支补丁与旧 4a27e6e 首页部分 stable patch-id 同为 `f94ac423484c6c05c1038bf7e543cee4ba456509`；第 177 节明确未纳入该独立首页滑动补丁。其属于尚未同步的业务优化，不是必须永久隔离的配置；本轮不擅自合并或宣称全仓完全一致。
+- 诊断关闭边界：config.js 和 .env.iap-diagnostics.example 均默认 false；仅默认关闭或到期不等于线上已持久关闭。对文档服务器进行一次短时、严格主机校验、非交互 SSH 探测，返回 Permission denied (publickey,password)，未获得服务器执行权限，未修改线上文件或重启服务。交接步骤为分别在 /opt/xuzhang/xuzhangapp/backend/.env 与 /opt/xuzhang/xuzhangapp-staging/backend/.env 设置 IAP_DIAGNOSTICS_ENABLED=false，并显式携带该 false 值分别 pm2 restart backend / backend-staging --update-env，避免旧 PM2 环境覆盖文件；两套 health 与关闭状态需收到操作结果后验收。保留审核登录、其他 IAP 配置、账号/交易和原日志。
+- 验证与保护：主代理与独立只读审阅交叉核对分支 tree、工程两行差异和首页补丁范围；没有业务代码变更，不重复完整门禁，沿用第 174/176/177 节测试证据。用户 backend/.env.staging.example SHA256 保持 `48FF5A142D67DBEAD8817432F23CE2A089C9A11C54D0A9D1B41622A30F8CD92C`；全部未跟踪素材、输出和既有 worktree 保留。没有提交、推送、部署、私钥读取或全量运行环境输出。
+- 剩余风险与下一步：先由有权限的操作者关闭两环境诊断并核对服务健康/有效开关。用户已验收生产配置 TestFlight 的 Sandbox 购买、恢复和加速到期，不要求重复此验收；真实 Apple Production 401 授权原因及既有 JWS 签名链缺口仍未解决，不能据此宣称真实收费链路已完成验收。首页业务补丁是否同步需单独定向处理，个人 AI 池及其他路线不启动。
+
+### 179. IAP 支付安全缺口只读复核（2026-09-18）
+
+- 状态：`ANALYSIS`，未进入实现；本轮承接“诊断关闭后继续”的支付风险核查，不改变交易路由、401 fallback、账号绑定、环境配置或会员授予规则。
+- 线上状态：生产与 staging `/health` 均返回 `ok: true`；生产诊断关闭由操作者完成重启，但本机仍无 SSH 权限，无法读取 PM2 有效环境快照，因此不把 health 当作开关验收证据。staging 未配置诊断开关，代码默认 `false`，保持不动。
+- 确定缺口：`backend/src/iapService.js` 的 Apple 响应信任路径仅通过 split/base64url/JSON.parse 读取 `signedTransactionInfo`，未验证 compact JWS 三段、protected `alg=ES256`、`x5c` 证书链、Apple Root CA、证书有效期或签名；商品、bundle、环境、账号和会员写入建立在未验签 payload 上。客户端 JWS 仍只能作为有界 Sandbox 路由 hint，不能升级为权益依据。诊断日志明确 `signatureVerified=false`，不应改作授权路径。
+- 最小后续任务：单独建立服务端 Apple JWS verifier（固定 Apple 信任锚、证书链/用途/有效期/ES256 验签），在现有业务字段校验和交易绑定之前执行；无效响应映射稳定的 `IAPVerifyError`，并补有效链、篡改、错误签名、非 Apple 证书、错误算法、段数/大小边界及“无交易/无会员写入”测试。不得借此修改客户端 hint、Production 401 回退、沙盒路由或账号迁移合同。
+- 401 结论：现有交易查询的 Production `401` 仍只能证明该次生产端点授权失败；Sandbox `200` 不足以区分 App Store Server API key 权限、issuer/key/bundle/JWT 或端点上下文。需要另行执行不带 transactionId 的 Apple Notification History 只读授权探测后再定位，不在本轮凭猜测改密钥或 endpoint。
+- 证据与保护：审计结论来自 `iapService.js`、诊断/路由专项及既有测试；当前 backend 测试覆盖路由和边界但没有真实 x5c 链验签 fixture。没有代码、依赖、服务器配置、交易数据、提交或推送变更。下一任务为用户明确授权后的独立 IAP JWS 验签修复与双环境测试。
+
+
+### 179. FIRST-USE-PERMISSION-SYNC-FEEDBACK-01：首次记账定位与联网备份反馈（2026-09-18）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`，当前无进行中的实现任务，未标记 VERIFIED。用户要求首次记账不申请非必要定位，天气场景才按需使用并说明用途；同时反馈拒绝“无线局域网与蜂窝网络”后仍显示云同步成功。本线程完整台账阅读沿用第 175/176 节记录，新增第 178 节及第 80/108/114 节边界已核对；保留第 178 节未提交内容。
+- 根因与范围：天气默认开启且保存后宠物文案/普通点击通过服务隐式索权。收敛到用户明确启用天气的入口，新安装默认关闭，已有明确开关保留；服务自动刷新只消费已有授权，关闭/拒绝不阻断记账。云端全量同步对非 401 的上传/删除错误继续循环后仍显示完成；定向修复完成条件、请求确认及失败/重试指引，不伪造系统再次授权弹窗，不把可达性或开关开启当作同步完成。
+- 允许文件：WeatherCompanionService、PetCompanionService、AppSettings、SettingsViewModel、SettingsView、Info.plist、LedgerSyncService、HomeViewModel、StateRegressionTests、相关源码专项及原门禁增量接线、真机签收和本台账。冻结 WeatherKit 源/精度/缓存期限、账本与同步 DTO、云端墓碑/归属/照片保护、历史天气记录、会员/订阅/临时诊断、后端、两套工程配置、分类意图及个人 AI 池。不自动提交推送或部署本轮新改动。
+- 验证与保护：相关开始快照保存在 `C:/Users/yf/AppData/Local/Temp/xuzhang-permissions-sync-d8q3a60p/baseline/`，既有环境模板/素材和第 178 节保留。新增首笔无索权、明确天气启用/拒绝/撤权/关闭、网络断连、失败不报成功及恢复后重试的测试和真机序列；运行原完整 Windows 门禁与两环境兼容检查，Swift/XCTest/真机未运行部分明确保留。用户当时是否联网成功仍需实际请求与设备证据，不把已发现误报路径写成已复现现场唯一原因。
+
+- 天气实现：新安装与缺键解码默认关闭天气，已有编码的 true/false 原样保留。保存后文案/普通宠物点击/基础宠物开关与自动刷新不再索权；唯一系统请求仅从明确开启天气或设置页授权按钮进入。Info.plist 和两处天气设置说明实际用于当地天气/城市、近似位置可用、拒绝不影响记账，未授权/拒绝/受限/系统定位关闭各有对应说明和适用的系统设置入口。
+- 关闭与撤权保护：WeatherCompanionService 发布权限状态，进入设置/返回前台同步状态但不索权；缓存读取、定位、WeatherKit/城市反查及迟到结果必须通过启用状态/权限和请求版本检查。关闭/撤权清空内存缓存、停止位置/反查并失效旧结果，不改历史记录。热路径使用缓存的功能开关，不在每次预览读取时解码整份设置；原 WeatherKit、三公里精度、30/60 分钟缓存和雨雪映射保持。
+- 同步实现：GET/POST/DELETE 要求真实传输成功及服务器明确 ok=true；GET 绕过本地缓存，请求加 no-cache 和 30 秒时限，不用旧响应证明本次联网成功。全量同步记录非 401 的上传/删除失败，任一失败均为尚未完成；删除失败不清重试日志，原墓碑、字段/照片保留、按本地新版本上传与 401 处理保留。并发单笔失败不会被全量/另一笔成功盖掉，单笔成功只描述该笔。开关开启与完成分离，备份入口/页内提示失败并提供重试；网络错误提供条件化系统设置指引，登录/验证码失败也使用相同指引，不擅自断言用户一定拒绝权限。
+- 用户现场边界：用户补充是“无线局域网与蜂窝网络”、拒绝后手动开启同步、账单实际成功同步，且当时仅蜂窝网络而非 Wi-Fi。不能用 Wi-Fi 回退解释，亦不能直接归因于本轮发现的误报路径；若云端确实收到本次新记录，则当时请求有联网能力。App 无法自行绕过系统蜂窝限制或强制重弹已拒绝的系统授权，系统实际联网开关、iOS/Build、真实请求及云端收到数据需真机对照。本轮不新增假系统授权弹窗或自行缓存一个“网络已同意”标记，不声称已复现/修复该现场唯一原因。
+- 回归与证据：StateRegressionTests 新增 16 项 XCTest（10 项隔离 URLProtocol 传输/确认/断网缓存/蜂窝拒绝/错误汇总/重试与引导，6 项天气默认/旧设置兼容/授权与迟到结果），未编译或执行。新增 `scripts/first_use_permissions_sync_regression.py` 并接入原门禁；原 WeatherKit 检查按实际请求方法定位以容纳新增授权守卫，仍校验共享源/current/摄氏度/雨雪映射。专项与原记账五专项全 PASS，Swift 语法解析相对基线无新增诊断，不等于编译。
+- 双环境完整验证：staging `1c9dd86` 当前工作区、真实 production `b60bf71` 的隔离副本分别完整运行 Windows release gate，退出码均 0、release_repository_gate: OK，仅既有七条文案软提示。日志为上述证据目录 staging-gate.log、production-gate.log，依赖日志及 validated-file-hashes.json 同目录；13 个验证文件在两份实际运行代码中哈希完全一致。后端/订阅诊断、两套工程、分类解析/HomeItem/同步字段和用户环境模板均未改，台账原第 178 节前缀逐字节保留，未跟踪素材/输出仍保留。
+- 剩余风险与下一任务：签收文档第 8.5 节增加 10 组流程，均未运行；需 Mac 编译/完整 XCTest，真机首笔无定位索权、明确天气启用/拒绝/撤权，以及用户仅蜂窝网络拒绝后登录/同步现场复现与恢复重试。需绑定实际包 commit/Build 和系统状态；不能用 Windows 门禁替代权限弹窗/服务器实测。完成本次必要真机证据后再决定 VERIFIED；本轮未提交、推送、部署或重启服务，不自动续做诊断关闭或首页同步。
+- 后续交付授权与范围（2026-09-18）：用户明确“提交推送，先不同步生产分支”，本次仅提交并推送 `feature/xuzhangapp-staging` 的上述 13 个实现/检查/签收文件及本节台账；第 178 节、用户环境模板和其他未跟踪资料继续留在工作区。提交前 13 个文件 SHA256 与双配置完整门禁通过时的清单全部一致，沿用既有证据，不重复无变更的全量检查；额外核对暂存范围及 `git diff --check`。使用普通提交和显式单分支推送，不同步 `xuzhang1.0-release-2026`，不部署或重启；交付前生产 HEAD 为 `b60bf71f8d90e09d9e20f735bddda055eebfc1da`，提交/远端结果在交付答复中记录。状态保持 CODE_DONE，下一步仍为 Mac/XCTest 和上述真机签收。
+
+### 180. IAP Apple JWS 服务端验签实现（2026-09-18）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`，尚未部署。用户明确要求“先单独实现服务端 Apple JWS 验签”；范围仅覆盖 Apple 返回交易 JWS 的信任验证和 backend 测试，不启动 Production 401 探测、客户端改动、沙盒路由改动、账号迁移或其他产品任务。
+- 实现：引入 Apple 官方 `@apple/app-store-server-library@3.1.0`；新增 `appleJwsVerifier.js`，在商品/账号/期限/绑定/会员写入前严格要求 compact JWS 三段、`alg=ES256`、三张 `x5c` 证书、大小上限，并用固定 Apple Root CA G2/G3、证书链、Apple OID、有效期和签名校验。验签失败统一为 `APPLE_BAD_RESPONSE`/502；上游 200 非 JSON 也不再冒泡为 500。客户端 JWS 仍只作受限 Sandbox endpoint hint。
+- 配置：Production 新增必填服务器环境 `APPLE_APPLE_ID`（App Store Connect 数字 App ID）；staging Sandbox 不需要。根证书默认随 backend `certs/` 部署，`APPLE_ROOT_CA_PATHS` 仅允许经审阅的替换路径；`APPLE_JWS_ONLINE_CHECKS=false` 默认做签名/链/证书日期校验，不发起 OCSP 网络请求。当前生产真实 `.env` 未改，部署前必须补数字 App ID 并随代码包带上根证书和新依赖。
+- 测试：新增 TEST-ONLY 合成三证书链和私钥，明确禁止部署；新增 `verify-iap-jws-signature.mjs` 覆盖 Production/Sandbox 有效链、签名/载荷篡改、错误算法、缺失/错误链长、超大 JWS 和不受信任根；路由专项 Apple mock 改用真实签名 JWS，保留伪造客户端 hint，并新增篡改 Apple 响应无会员/交易写入断言。2026-09-18 backend `npm test` 通过：原 auth/deleted/nudge/ledger/env/review/diagnostics，加 JWS 专项与 153 场景 IAP routing；`npm ci --ignore-scripts --no-audit --no-fund`、`git diff --check`、package JSON 解析均通过。
+- 证书来源与保护：生产 `apple-root-ca-g2.cer` SHA-256 `C2B9B042DD57830E7D117DAC55AC8AE19407D38E41D88F3215BC3A890444A050`，G3 SHA-256 `63343ABFB89A6A03EBB57E9B3F5FA7BE7C4F5C756F3017B3A8C488C3653E9179`，均来自 Apple PKI；测试 leaf 私钥仅在 `scripts/fixtures/apple-jws-test/`，不进入生产部署包。`npm ci --ignore-scripts --no-audit --no-fund` 通过。
+- Windows staging release gate（`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging`）已完成并返回 `release_repository_gate: OK`，包含 fixtures、IAP environment gate、静态/体验检查和双配置边界检查。
+- 剩余风险与下一步：尚未在真实 Production/Sandbox server env 上运行验单；需先配置并审阅真实 `APPLE_APPLE_ID`、确认 cert 资源随包部署，再在 staging 和 production 隔离副本运行 backend gate 和真实沙盒恢复，之后才可部署。Production 401 原因仍是独立问题，JWS 验签修复不等于 Apple API JWT 授权已修复；Apple Root/库版本升级和 OCSP 策略另行审阅。本轮不部署或重启服务器。
+
+### 181. 会员续费与永久升级入口方案核对（2026-09-20）
+
+- 范围：用户询问订阅与永久权益不同的前提下，会员升级入口如何设计；本轮仅只读分析和方案记录，不进入实现，不改变路线任务状态。核对全局冻结边界、MEMBER-03、近期 IAP 记录及当前相关源码；没有完成全文逐段重读，不据此开始代码修改。
+- 证据：`MemberPricingView.swift` 的 `showsPricing` 仅向 prospect 开放，订阅态同时隐藏套餐和永久预览，只剩管理订阅/恢复；永久主题入口虽能传入 lifetime 高亮，目标购买项在订阅态不存在。`SettingsView.swift` 的有效会员入口主要通往档案，到期提供续费。`APP_STORE_IAP_SETUP.md` 规定月/年属于同一订阅组，永久为非消耗型商品；现有 `IAPService.purchase` 和会员页购买流程已支持 lifetime。
+- 建议：账号页有效月/年会员并列提供会员详情与升级永久入口；详情页在当前状态和已解锁摘要后、档案前放永久升级区域，明确一次性价格及真实永久专属权益。月/年切换称更改订阅周期并进入 App Store 管理；到期用户显示续费主操作并可选择永久；永久会员不再显示购买操作，但保留原订阅管理入口以处理可能仍在续费的旧订阅。永久主题解锁入口应定位实际可见的永久购买区域。
+- 购买边界：价格使用 StoreKit 返回值；首版不承诺补差价、抵扣已付订阅费或自动退款。购买永久不会自动取消独立的自动续期订阅，购买前明确说明，验单成功后提供管理原订阅入口，不能把打开管理页视为已取消。后续实现应保留已有账号绑定/验单/finish 流程，并按目标商品修正登录续购中“已有会员即停止”的判断，永久权益优先于旧订阅恢复结果。
+- 验证与风险：本次为源码/商品配置文档核对，无代码变更，不运行产品回归；两图拍摄时间不同，不能证明同一时刻权益冲突，沙盒加速到期也需实际环境佐证。实现时需验证到期/前台刷新、购买取消/失败/待处理、登录后继续升级、旧订阅与永久共存、永久主题入口及真实 StoreKit 价格；不把到期时间当作已确认的自动续费状态，不用订阅档案文案暗示已拥有永久权益。
+- 文件与下一步：仅本台账追加本节，保留用户 `backend/.env.staging.example` 和未跟踪文件；没有提交、推送或部署。后续若进入实现，先完整重读台账并建立独立任务卡，限定入口/展示与必要的目标商品续购判断，记录冻结边界例外及对应回归，不并入 JWS、价格/商品 ID、账号迁移或其他路线任务。
+
+### 182. MEMBER-LIFETIME-UPGRADE-01：订阅会员永久升级入口（2026-09-20）
+
+- 状态：`CODE_DONE`（本轮 `IN_PROGRESS` → `CODE_DONE`），开始/代码完成日期 2026-09-20，当前无进行中的实现任务。用户明确要求“进行后续优化”，并确认截图已生效/待续期是沙盒正常到期，本项不改到期判断、状态刷新或自动续订状态模型。开工前团队分段完整阅读台账 1–5899 行（主代理 1–1100；独立代理 1101–3000、3001–4700、4701–5899，截断段重读），合并冻结边界和当前状态；开始工作区仅第181节、用户环境模板和未跟踪资料脏，全部保留。
+- 目标与允许范围：账号页有效订阅的会员详情/永久升级，到期续费或升级，永久主题高亮路由的真实购买目标；会员详情中订阅态的独立永久购买区域、购买前确认和成功后的原订阅管理、永久态档案后的购买恢复/旧订阅管理；按目标商品判定登录后续购，仍需用户明确再次点击。允许 `MemberPricingView.swift`、`SettingsView.swift`、`IAPService.swift`、`SettingsViewModel.swift`、`StateRegressionTests.swift`、`scripts/membership_value_lint.py`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 及本台账。
+- 冻结边界例外：已有任意会员即清购买意图阻止订阅转永久，需改为按目标商品判断；已有等级权重加 Unix 到期秒的排序会让年度高于永久，手动恢复也会在第一笔订阅成功后退出，需将永久优先选择接入自动/手动恢复。仅修正选择与入口，购买、账号 token、后端验单、失败透传及成功后 finish 仍复用原链路；其他同等级排序语义保留。不新增数据字段，无迁移；回滚为按本任务文件差异撤回入口/选择规则，不回滚用户数据或其他任务。
+- 产品边界：月/年更改周期仍进入 App Store 管理；永久沿用非消耗型商品和 StoreKit 实际价格，不改价格、Product ID、权益、退款/抵扣规则，不声称自动取消原订阅。购买成功再引导用户手动取消，打开管理入口不视作取消完成；永久态仍可检查旧订阅。不触及 JWS、服务器配置、生产分支、沙盒到期、账本/照片/同步字段、共享档案快照、个人 AI 池和其他路线。
+- 外部核对：UpNote 官方升级说明及重复收费帮助确认转 lifetime 需用户取消旧订阅，开发者不能代取消（`https://help.getupnote.com/resources/upnote-premium/upgrade-to-premium`、`https://help.getupnote.com/resources/upnote-premium/troubleshooting/duplicate-charges`）；Apple 官方订阅管理支持用户查看、更改和取消（`https://developer.apple.com/documentation/storekit/appstore/showmanagesubscriptions(in:)`、`https://support.apple.com/en-us/118428`）。不将一家产品流程泛称为所有同类 App 的统一规则。
+- 验证计划与下一步：新增订阅可升永久/永久禁止重复买/非会员可选购、永久与年度共存优先及同档期限选择的 XCTest，补会员源码接线门禁和真机矩阵；运行完整 Windows release gate。当前 Windows 无 Swift/Xcode，编译、XCTest、StoreKit及小屏/大字/VoiceOver真机流程待补，完成代码只记 `CODE_DONE`。不自动提交、推送、部署或同步生产。
+- 实现结果：账号页有效月/年会员显示“会员详情”和“升级永久会员”，到期入口为“续费或升级”并展开原三个套餐；订阅详情在已解锁摘要后增加永久购买区域，只展示 StoreKit 实际永久价格，具备加载/不可用/重试状态。永久主题高亮能定位实际升级区；月/年更改周期仍走原 App Store 管理 URL。所有永久购买在 StoreKit 前再次确认一次性金额、原订阅不自动取消/抵扣/退款，成功后提供“管理原有订阅”；永久详情档案后保留检查旧订阅和恢复购买，条件化提醒不伪称用户仍在续费。
+- 续接与恢复：登录成功只保留允许的目标购买及恢复意图，仍须明确再次点击；永久账号拒绝重复购买，购买/恢复增加重入守卫，实际发起时清理旧续接卡。共享 `IAPEntitlementSelection` 保证永久优先，再保持年/月等级及同档到期顺序；自动与手动恢复逐一验证候选，其他账号永久被拒后仍能核对当前账号订阅，不改绑定规则，保留首个真实错误。任务取消或账号切换停止后续候选；成功后 finish 仍只走原手动购买/恢复链路。
+- 独立复核：发现并修正“从其他购买按钮完成升级后续接卡残留”和“自动恢复只验首个永久失败就退出”两项，复核后未发现新的阻塞项。新增 7 个 XCTest（3 个排序/候选保留，4 个异步验证成功/失败回退/首错/取消），扩展现有 3 个会员状态测试；新增测试均未在此 Windows 环境编译或执行，不能当作运行通过。会员 lint 增量覆盖确认/续接/原订阅提示与共享恢复接线；发布矩阵第 8.2.1 节有 7 组 `NOT_RUN` 真机流程。
+- 验证证据：`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 退出 0、`release_repository_gate: OK`；日志 `tmp/member-upgrade-gate-20260920.log`，含会员 lint、原完整体验/文案/语义/夹具/环境门禁，仍只有既有 7 条文案软提示。5 个改动 Swift 文件用现有 tree-sitter 工具与 HEAD 对比无新增语法诊断（SettingsViewModel 原有 2 条解析器诊断未变化，其余 4 个文件为 0）；此项不等于 Swift 编译/类型检查。`git diff --check` 通过。
+- 保护、剩余风险与下一任务：实际修改仅本节允许的 8 个文件；未改商品/价格/权益常量、AppSettings 到期判断、后端/JWS/工程配置、共享档案快照或用户环境模板，保留所有原有未跟踪文件。当前分支 `feature/xuzhangapp-staging`，未提交、推送、部署或同步生产。下一步在同一候选包完成 Debug/Release、完整 XCTest 与第 8.2.1 节 StoreKit/iPhone/大字/VoiceOver 签收，尤其永久与旧订阅共存、不同叙账账号的验证失败回退、取消原订阅不影响永久及主题入口。完成这些外部证据前保持 `CODE_DONE`，不自动启动相邻任务。
+
+### 183. RELEASE-1.0-GAP-REVIEW-02：沙盒购买通过后的封版差距（2026-09-20）
+
+- 范围：用户询问“1.0版本封版还差什么”，并明确沙盒账号订阅购买正常。本轮仅只读审计与验收记录更新，不开始产品实现、不改变路线任务状态。沿用本线程第182节完整台账阅读，核对最新追加、现有封版清单、工作区及真实远端头。
+- 已通过边界：本次用户确认基础沙盒订阅购买；第174/178节已有生产配置 TestFlight 的 Sandbox 购买、同账号恢复、加速到期验收，不再重复列为未通过。该证据不自动覆盖尚未打包的第182节永久升级/新恢复选择或第180节新服务端验签；不推断用户测过所有取消、撤销或跨账号边界。
+- 交付证据：`git ls-remote origin refs/heads/feature/xuzhangapp-staging refs/heads/xuzhang1.0-release-2026` 返回 `7ada3f52b2eae21e2bee9fb348379135e35cf73d` 和 `b60bf71f8d90e09d9e20f735bddda055eebfc1da`，与本地追踪一致。JWS、首次定位/同步反馈修复和独立首页补丁仍有生产差异；永久升级仍未提交。本次未同步分支、未推送、未部署；分支状态不冒充线上部署状态。
+- 封版剩余：确定纳入补丁并固定最终生产 commit/Archive/Build/后端版本；服务端 JWS 配置与部署及真实验单、历史 Production 授权缺口闭环；新永久升级的针对性沙盒真机验收；最终候选的 Xcode/XCTest、数据/图片/同步/权限/性能/无障碍证据；实际待审包审核登录及 App Store Connect 商品、协议和资料配置核对。已实现的 JWS 不再列作未修代码，已通过基础沙盒不重列；其余未回填为证据缺失，不是已知失败。
+- 文件与验证：仅本台账和 `RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md` 追加最新复核（8.6），标明8.3历史状态已被更新。读取现有第182节完整 Windows gate 结果，本轮无产品变化不重复运行全量测试；文档 `git diff --check` 检查。已有全部代码、用户环境模板及未跟踪资料保留。
+- 剩余风险与下一步：本机仍无 Mac/Xcode，未访问服务器运行态、未请求 Apple 正式端点、未登录 App Store Connect，不能据历史记录认定当前线上必然401或审核账号不可用。先固定最终候选，再完成明确缺项及回填已通过证据；个人 AI 池继续2.0，不自动开启新功能、部署或收费测试。
+
+### 184. MEMBER-LIFETIME-UPGRADE-01 测试分支提交交付（2026-09-20）
+
+- 授权与范围：用户明确“帮刚刚修复的提交推送一下”，本次交付第 182 节会员升级与恢复修复及第 183 节封版复核文档，目标仅为 `feature/xuzhangapp-staging`。沿用此前测试分支交付边界，不同步生产、不部署后端、不生成或上传 TestFlight 包；实现状态保持 `CODE_DONE`。
+- 文件：`NativeDemoApp/Services/IAPService.swift`、`NativeDemoApp/ViewModels/SettingsViewModel.swift`、`NativeDemoApp/Views/MemberPricingView.swift`、`NativeDemoApp/Views/SettingsView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/membership_value_lint.py`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、`RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md` 及本台账，共 9 个文件。用户 `backend/.env.staging.example` 和全部未跟踪文件不纳入提交，原内容保留。
+- 验证证据：复核本轮差异和 `tmp/member-upgrade-gate-20260920.log` 中 `release_repository_gate: OK`，实现未再修改，沿用第 182 节完整 Windows 门禁，不重复无变更测试；提交前执行 `git diff --check` 并核对暂存文件。提交前真实远端测试分支为 `7ada3f52b2eae21e2bee9fb348379135e35cf73d`、生产分支为 `b60bf71f8d90e09d9e20f735bddda055eebfc1da`；普通提交后显式推送测试分支，再核对远端提交，结果在本轮交付答复记录。
+- 剩余风险与下一步：Windows 无 Xcode，Swift 编译、XCTest、Archive 和新增会员流程真机签收仍待完成。第 183 节及签收文档 8.6 的“未提交”是本次交付前快照；代码推送不等于测试包已更新，下一步须用包含本次提交的新 Build 验证永久升级、登录续接及永久与订阅共存恢复。
+
+### 185. MEMBER-SUBSCRIPTION-MANAGEMENT-01：订阅管理改用系统原生页（2026-09-20）
+
+- 状态：`CODE_DONE`（本轮 `IN_PROGRESS` → `CODE_DONE`）；本轮唯一实现任务，属于第 182 节会员升级的真机反馈修复。沿用本线程第 182 节完整台账阅读，补读后续记录及当前冻结边界。起点为测试分支 `f25349e`，工作区仅用户环境模板和既有未跟踪资料，全部保留。
+- 现场与判断：用户确认设置中的沙盒账户管理可正常打开；六张截图显示 App 内管理按钮离开叙账，打开普通 App Store 登录页并显示无法连接，最终返回 Today。源码为 `https://apps.apple.com/account/subscriptions` 通用外链，未发现循环购买或自动 `AppStore.sync()`；外链路径与现场一致，但不能由 App Store 首页推断购买或后端已切到 Production，也不能断言系统认证失败原因已完全复现。
+- 允许范围：仅 `NativeDemoApp/Views/MemberPricingView.swift`、`scripts/membership_value_lint.py`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本台账。订阅态、永久购买成功提示、永久详情三个管理入口统一使用 SwiftUI `manageSubscriptionsSheet(isPresented:)`，增加操作互斥；关闭后按现有方法核对权益，不自动购买、恢复、取消订阅或调用 `AppStore.sync()`。Apple 官方说明原生管理支持 Sandbox/StoreKit 测试，当前 iOS 17 最低版本覆盖其 iOS 15 可用性。
+- 冻结边界：不改商品、价格、购买/恢复选择、账号绑定、后端、JWS、生产/测试环境、到期模型及其他截图文案。只替换订阅管理展示方式和关闭后的既有权益刷新调用；无数据迁移，回滚仅撤回该入口差异。失败时不自动降级打开普通 App Store 外链，系统登录和错误页仍由 Apple 管理。
+- 验证计划与下一步：调整现有会员门禁覆盖原生入口并阻止通用外链回归，补三入口、关闭/重开、弱网失败和取消后永久保留的真机矩阵，运行完整 Windows 发布门禁。Windows 无 Xcode/iPhone，本机不能验证系统弹窗/账号会话；通过后只记 `CODE_DONE`，必须用包含修复的新 Build 在同一设备和沙盒账号复验。当前不部署、不自动修改生产分支。
+- 实现与独立复核：三个入口共用稳定页面根节点上的系统管理 sheet，按钮防购买/登录/永久确认/重复呈现冲突；成功提示先收起，避免返回后遮挡。只在管理页从呈现变为关闭时递增刷新 ID，首次 `.task` 跳过，后续明确 `synchronize: false` 调用既有权益核对；这会复用原服务端验单而非纯只读，但不会发起 `AppStore.sync()`、购买或手动恢复，不把关闭当取消成功。任务随视图生命周期取消，复用原账号/token 守卫。独立复核未发现新增阻塞，不扩大修改共享前台或账号刷新逻辑。
+- 验证结果：`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 退出 0、`release_repository_gate: OK`，证据 `tmp/native-subscription-management-gate-20260920.log`；包含调整后的会员门禁及完整原回归，只有既有 7 条文案软提示。`git diff --check` 通过；未执行 Swift 编译、XCTest 或真机系统页验证，不能承诺 Apple 不再要求认证。
+- 交付与下一步：本轮仅上述 4 文件变更，未提交推送、未打包 TestFlight、未部署或同步生产，用户环境模板及未跟踪资料保留。下一步按发布矩阵 8.2.2 四组场景在新 Build 复验，优先对照同设备同沙盒账号下三个原生入口、取消/关闭重开、旧订阅取消后永久保留；原生 API 的成功展示不等于已经取消续费。
+- 现场补充：用户进一步确认旧入口会连续弹出三次登录窗口，记录为同次进入后的重复认证现象；各次输入/取消操作及系统错误日志尚未取得，不据次数断言 App 发起了三次调用或 Apple 固定重试三次。新 Build 需记录一次点击后的弹窗数量、取消能否退出及是否自行再弹；本次仅补证据与验收文档，无新增代码，不重复完整门禁，状态保持 `CODE_DONE`。
+- 后续交付授权与复测（2026-09-20）：用户明确“提交推送 再测一下”，仅交付本节允许的 4 文件到 `feature/xuzhangapp-staging`。按要求重新运行完整 Windows 门禁，退出 0、`release_repository_gate: OK`，日志 `tmp/native-subscription-management-delivery-gate-20260920.log`，只有原有 7 条文案软提示；独立复核提交范围通过，代码未再修改。`git diff --check` 通过，普通提交前核对暂存范围，随后显式推送测试分支并核实远端提交。交付前测试远端为 `f25349e0b862e21ba3795ee687124905476c0efe`，生产远端为 `b60bf71f8d90e09d9e20f735bddda055eebfc1da`，最终提交与推送结果在本轮答复记录。
+- 交付边界：此前“未提交推送”为本次授权前快照；本次不打包或上传 TestFlight、不部署、不改生产分支。`backend/.env.staging.example` 原内容与全部未跟踪资料保留且不提交。Mac 编译/XCTest和同设备沙盒页仍待新 Build 签收，四组真机用例保持 `NOT_RUN`，状态仍为 `CODE_DONE`。
+
+### 186. 沙盒清历史与 staging 清库后的购买错误诊断（2026-09-20）
+
+- 范围与现场：用户提供三张会员购买提示图，分别为“月度订阅已过期或尚未生效”“属于另一个叙账账号”“已经绑定到另一个叙账账号”；随后确认 Apple 沙盒历史及 staging 数据库已清空，沙盒账号/叙账手机号账号只重新登录过其中一个。清理所含表、实际包 Build/API、各截图与清理的先后及交易 ID 尚未取得。仅只读核对客户端、后端与 Apple 官方说明，不开始实现、不改变既有任务状态。
+- 客户端证据：`IAPPurchaseFailureCopy` 第一种原文来自 `IAPService.purchase` 在 Apple 返回交易后对 `expirationDate <= Date()`（或缺失日期）的本地拦截，发生在提交后端前；不能用清业务数据库解决，也不能由文案确定是旧缓存还是实际加速到期。购买时 `appAccountToken` 为当前 `cloudUserId`，不是手机号本身；本机 pending map 不作为发起购买时选择交易的数据源。
+- 后端证据：`APP_ACCOUNT_MISMATCH` 比较 Apple 已验交易里的 token 与当前登录用户 ID，在查业务交易绑定之前即可拒绝。`store.getOrCreateUserByPhone` 在用户不存在时生成新 UUID，因此清用户表后同手机号重建不保证与旧 Apple 交易归属一致。`TRANSACTION_ALREADY_BOUND` 则要求当前运行存储查到相同 originalTransactionId 且归属他人；按当前源码，正确运行存储在当次查询确实无该记录就不能产生此错误。Postgres 模式逐次查 `iap_transactions`，该表无 users 外键；绑定不在 Redis。需区分实际访问另一后端、未包含交易表、进程内存模式、清后写回或清理前截图，不能笼统认定用户未清库。
+- Apple 证据：`https://developer.apple.com/documentation/storekit/testing-in-app-purchases-with-sandbox` 明确清空购买历史后还需退出沙盒账号以清理设备购买缓存，再重新登录；历史多时清理可能超过数分钟。TestFlight 沙盒交易环境与业务 staging/production 独立，且媒体与购买项目的正式账号重新登录会让 TestFlight 交易改用该 Apple 账号，不能仅凭“TestFlight/沙盒”判断清理的是当前交易账号。
+- 验证与下一步：本轮仅本台账新增诊断，独立后端复核确认上述分支；无产品修改，不重复运行测试。先完成沙盒账号与叙账账号两边重新登录，确认清历史完成及实际购买账号，随后在固定账号下做一次新的沙盒购买并记录 Build/时间；若仍错误，核对实际 API 域名、当前 userId、Apple appAccountToken、transactionId/originalTransactionId 和到期时间的对应关系，按最少脱敏信息定位。不打印 JWT/JWS/完整环境变量，不再自动清库、不改绑、不部署；当前没有设备或线上请求证据，不能宣称已确定根因。
+
+### 187. 新沙盒账号月度升级永久与取消订阅用户验收（2026-09-20）
+
+- 用户证据：明确反馈“换了新账号，订阅月会员、升级永久会员，然后点击管理订阅、取消订阅都正常，取消订阅后永久会员资格正常”。记录上述成功流程为用户确认通过，不再把实际手动取消或升级成功路径列作完全未测。
+- 对应范围：第 182 节月度升级永久及原订阅取消不影响永久，第 185 节管理入口成功路径；发布矩阵 `MEMBER-UPGRADE-03/04`、`MEMBER-MANAGE-03` 改为具体已通过子项与其余待测，新增 8.2.3 用户签收记录，封版签收文档新增 8.7。会员实现任务整体仍为 `CODE_DONE`，不冒充全部 `VERIFIED`。
+- 证据边界：用户未提供本次 Build、设备/iOS、后端版本；不推断全部三个入口、年度升级、重启/恢复、登录续接、购买取消/失败/pending、弱网或无障碍均通过。管理可用不自动推断认证弹窗精确次数；第 186 节旧沙盒清历史与清库后的错误根因仍未完全确认，也不据本次成功认定服务器部署/正式环境授权已验收。
+- 文件与验证：仅本台账、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、`RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md` 更新证据；沿用既有代码及 Windows 门禁，本轮无产品改动，不重复运行测试。独立复核证据覆盖范围，文档执行 `git diff --check`；用户环境模板、此前台账第 186 节及未跟踪资料全部保留，未提交推送、未部署或同步生产。
+- 下一步：保持本次沙盒账号、叙账账号和交易记录，优先关闭重开 App 后确认永久，再手动恢复购买确认仍为永久；补实际 Build/设备信息后归入最终包签收。已完成的月度购买、升级、管理及取消流程不要求重复证明。
+
+### 188. MEMBER-ENTRY-COPY-RESTORE-01：恢复账号页原档案入口名称（2026-09-20）
+
+- 状态：`CODE_DONE`（本轮 `IN_PROGRESS` → `CODE_DONE`）。用户明确要求将截图中被改为“会员详情”的入口“改回去”；依据提交 `f25349e` 父版本恢复原文“查看完整生活档案包含”。沿用本线程完整台账阅读及最新追加，仅修改 `NativeDemoApp/Views/SettingsView.swift` 的该处入口文字和本台账。
+- 边界与验证：不调整入口路由、按钮样式、会员页标题、升级和购买恢复行为；保留既有验收文档、台账诊断、用户环境模板及未跟踪资料。单行文案变更执行已有会员门禁和 `git diff --check`，不新增测试或重跑完整发布门禁；尚无新包真机显示证据，不自动提交推送或同步生产。
+- 结果与下一步：入口已恢复原文，`python scripts/membership_value_lint.py` 返回 `membership_value_lint: OK`，限定文件 `git diff --check` 通过。Windows 未执行 Xcode/真机；下次测试包查看恢复后的入口显示。本轮未提交推送。
+
+### 189. 用户手测清单逐项确认回填（2026-09-20）
+
+- 用户证据：第 187 节之后明确确认关闭重开 App 后永久正常、恢复购买正常，以及清单第 1、6 条通过；本轮进一步确认“8,9,11验过了”。按原 16 项手测编号，已确认通过为 1、3、4、6、8、9、11；新增对应连续记账/保存、首页滑动删除、照片查看修改。此前第 187 节所列重启/恢复待测已被后续反馈覆盖，不再要求重复证明。
+- 剩余清单：2（购买取消/重复点击）、5（登录续接/防重复购买）、7（Apple 商品加载失败与恢复网络重试）、10（AI 保存/清空）、12（本地备份恢复）、13（权限）、14（断网/双设备同步）、15（账号切换/审核登录）、16（显示/无障碍）。第 7 条此前仅澄清测试含义，没有用户通过确认；可见缓存价或本地备用价不等于已触发商品加载失败。
+- 文件与验证：仅更新本台账、`RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md` 第 8.7/8.8 节、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 第 8.2.1/8.2.3 节，使已通过子项与剩余项一致。无产品代码变更，不新增或重复运行测试，文档 `git diff --check` 核对；保留尚未提交的入口文案恢复、已有用户环境模板及未跟踪资料，不提交推送或部署。
+- 边界与下一步：接受用户逐项反馈为手测通过，不扩展到未报告的工程专项或全部 `VERIFIED`；Build、设备/iOS、实际后端版本仍待补。继续剩余九项，已测七项移出用户待测列表；旧沙盒账号诊断与最终生产交付边界保持。
+
+### 190. RECORD-NOTE-FOCUS-FIX-01：备注展开与连续编辑失焦修复（2026-09-20）
+
+- 状态：`CODE_DONE`（本轮 `IN_PROGRESS` → `CODE_DONE`），当前无进行中的实现任务，未标记 VERIFIED。用户反馈记账页点“自己写一句”没有焦点、已有备注删除一字后键盘收起，要求检查近期回归。沿用本线程第 182 节团队全文阅读及后续逐节续读，重新核对第 176 节输入法合同和全局冻结边界；保留全部既有未提交内容。
+- 历史与原因：`5637193`（2026-09-18）将三个备注输入从 SwiftUI TextField 换为 `CommittedRecordNoteField`，移除了 `.focused`，却继续通过普通 Binding 读写 `@FocusState`。新建和 Sheet 已无 SwiftUI 焦点目标；聚焦编辑页只有金额挂在焦点系统上。UIKit 获得焦点后文本刷新仍可能读到 false，触发 wrapper 主动 resign。展开后的自动聚焦早于该改动已存在，不是原本没有设计；这是该次 UIKit 适配遗漏，与本次现场吻合，尚无本机 iOS 运行证据。
+- 允许范围：`RecordView.swift`、`RecordEditSheet.swift`、`FocusedRecordEditor.swift` 的备注焦点所有权与明确收键盘入口，必要的 `StateRegressionTests.swift` 和 `scripts/record_continuous_intent_regression.py` 回归，以及本台账和第 8 项验收补充。UIKit 备注用普通状态驱动，原生金额仍用 SwiftUI FocusState；保持中文组词提交、保存前结束编辑和明确切换输入的行为。
+- 冻结：不改分类最后明确意图、文案/润色/情绪、金额/保存/存储、照片/同步/会员、页面布局或入口名称；不整包回退第 176 节，不改用户环境模板。不进行迁移、提交推送、生产同步或部署。
+- 验证计划与下一步：核对三个入口和延迟焦点请求，增加承载真实编辑视图的焦点回归及静态接线守卫，执行连续记账专项和 Windows 完整门禁。Windows 无 Xcode/iPhone，Swift 编译、XCTest 和实际键盘保持需新包签收。第 8 项之前通过的记账/编辑结果继续保留，本次新增失焦反馈单列待复验，不能以旧通过或静态检查覆盖。
+- 实际实现：新建页和编辑 Sheet 将 UIKit 备注的未注册 FocusState 改为普通 State；FocusedRecordEditor 分离备注 State 与原生金额 FocusState，获得焦点时清另一方，备注结束不再清新金额焦点。分类/日期操作复用同步 dismissKeyboard。旧金额延迟请求在备注已获焦时退出，备注延迟请求在编辑区已关闭（新建还检查手动模式）时退出；保留原动画时序、滚动策略和共享输入法提交逻辑。
+- 文件与回归：实际改动为上述三个 Swift 页面、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/record_continuous_intent_regression.py`、`RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md` 和本台账。新增 2 项 UIHostingController 承载真实 FocusedRecordEditor 的 XCTest，覆盖连续删除/插入后同一控件保持第一响应者、实际保存回调收到正文并主动收起、金额/备注来回切换；没有只模拟 Coordinator。静态守卫防止 UIKit 备注重新接回无目标 FocusState。独立历史核对与最终代码/测试复核未发现新增阻塞问题。
+- 验证证据：`python scripts/record_continuous_intent_regression.py` 通过；`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 退出 0，`release_repository_gate: OK`，日志 `tmp/record-note-focus-gate-20260920.log`，只有既有 7 条文案软提示；`git diff --check` 通过。未执行 Swift 编译或 XCTest；2 项新测试无活动 iOS Scene 时会明确 skip，不能把该情形记为通过。
+- 保护与剩余风险：前序会员入口文案恢复、验收文档、台账诊断、用户 `.env.staging.example` 和所有未跟踪资料均保留；未提交推送、未部署或同步生产。下一步在 Mac 完成 Debug/Release 编译与完整 XCTest，并确认 hosting 测试实际执行（含渲染等待稳定性），再按签收第 8.9 节用新包复验新建/两个历史编辑入口的自动聚焦、连续删字/删空/中间编辑、中文组词、金额互切及立即保存。当前 Windows 证据不足以宣称真实键盘问题已验收；不扩大至其他页面或相邻路线任务。
+
+### 191. RECORD-NOTE-KEYBOARD-AVOIDANCE-01：记账备注保持在键盘上方（2026-09-20）
+
+- 状态：`CODE_DONE`（本轮 `IN_PROGRESS` → `CODE_DONE`），当前无进行中的实现任务。用户进一步明确输入框要自动上抬到键盘上方。沿用本线程完整台账阅读，续读第 190 节及当前代码；第 190 节焦点修复保留，不能把恢复原有上滚等同于可靠避让。
+- 原因与范围：`ContentView` 对内容和 Tab 栏整体忽略键盘安全区，记账页仅用固定 520 留白和聚焦后 0.18/0.42 秒滚到全高区域中心，小屏/高键盘可能仍遮挡。本项仅允许 `RecordView.swift` 内本地测量实际键盘遮挡并收缩滚动区域，补键盘展开/高度增加后的备注定位；必要的 `StateRegressionTests.swift`、现有连续输入源码门禁、签收文档和本台账。编辑 Sheet 已使用系统安全区，未发现相同缺口，不扩大到全局或两个历史编辑布局。
+- 冻结边界：本任务只允许记账备注编辑时的局部视口高度变化；不改 ContentView/Tab 栏、金额键盘、分类/输入法/保存、备注文案、会员或数据规则。测量完整视口，屏幕坐标经当前 window 转换，不按固定键盘高度，不重复避让已被系统移开的区域；失焦或键盘隐藏后恢复原区域。无迁移，不提交推送或部署，全部既有 dirty 修改保留。
+- 验证计划与下一步：加入遮挡几何的边界回归，源码守卫确认本地避让和键盘显示后的定位接线，运行完整 Windows 门禁；新包必须覆盖小屏、中文候选栏/切换键盘、收起重开、连续编辑和切金额，确认备注完整位于键盘上沿以上且不来回跳动。Windows 不能执行 UIKit/SwiftUI 键盘验收，完成后最多记 CODE_DONE。
+- 实际实现与文件：`RecordView.swift` 新增局部 `RecordKeyboardViewportReader`，把键盘结束 frame 从当前屏幕转到 window 再转到完整页面视口，监听尺寸变化/隐藏及布局变化；只在备注聚焦时以实际遮挡量设置 ScrollView 外部底部 padding。测量在 padding 外保持稳定，不遍历私有 SwiftUI 视图；已有安全区避让后无交集则为 0。滚动 ID 移到输入框本身，键盘真实显示和遮挡高度增加后重新居中于可见视口；浮动键盘保守收缩至上沿。ContentView 与 Tab 栏未改，两个编辑布局及前轮焦点修复保留。
+- 验证证据：`StateRegressionTests.swift` 新增 3 项几何测试，覆盖局部遮挡不同于键盘总高、已避让/隐藏/横向不交集、浮动及超大键盘上界；原 2 项 hosting 焦点测试保留，全部未在 Windows 编译运行。`scripts/record_continuous_intent_regression.py` 追加避让接线守卫并通过；完整 Windows gate 退出 0、`release_repository_gate: OK`，日志 `tmp/record-note-keyboard-gate-20260920.log`，只有原有 7 条文案软提示。`git diff --check` 通过，独立只读审阅未发现明确阻断问题。
+- 剩余风险与下一步：实际文件仅 RecordView、StateRegressionTests、连续输入源码脚本、签收文档第 8.9 节和本台账。Windows 无 Xcode，尚无 Swift 编译、几何/XCTest 执行或真机键盘动画证据；尤其中文候选栏变化、交互拖动收键盘与 padding 动画需实际小屏验收，不能标 VERIFIED。下一步合并第 190 节在新 Build 验证自动聚焦、连续删字与键盘上方完整可见，记录设备/iOS；未提交推送、未同步生产或部署，前序 dirty 内容和用户环境模板均保留。
+
+### 192. 备注焦点、键盘避让及会员入口名称恢复提交交付（2026-09-20）
+
+- 授权与范围：用户明确“这几个修复都提交推送一下”，本轮交付第 188、190、191 节已有修复及第 186–189 节已记录的诊断/用户验收，目标仅为当前 `feature/xuzhangapp-staging`。沿用本线程完整台账阅读并续读最新记录，不开始新实现任务，各修复保持 CODE_DONE。
+- 提交文件：`NativeDemoApp/Views/RecordView.swift`、`RecordEditSheet.swift`、`FocusedRecordEditor.swift`、`SettingsView.swift`，`NativeDemoAppTests/StateRegressionTests.swift`，`scripts/record_continuous_intent_regression.py`，两份 RELEASE 签收/门禁文档和本台账，共 9 文件。仅显式暂存这些路径；用户 `backend/.env.staging.example` 和全部未跟踪素材、脚本、输出、tmp 保留且不提交。
+- 检查与交付：提交前核对真实远端测试分支 `96c3ee70fecea9845f23744f1caf0e4adb6ace7a`，生产分支 `b60bf71f8d90e09d9e20f735bddda055eebfc1da`。代码和测试自第 191 节完整 Windows 门禁通过后未变，沿用 `tmp/record-note-keyboard-gate-20260920.log` 的 `release_repository_gate: OK`（原有 7 条文案软提示），不重复无变化全量测试；执行最终差异/暂存范围及 `git diff --check` 核对。普通提交后显式推送测试分支，再核对真实远端提交，最终 hash 和推送结果在本轮答复记录。
+- 剩余风险与下一步：此前各节“未提交推送”为本次授权前快照，本次不打包或上传 TestFlight、不部署、不更改生产分支。Windows 无 Swift/Xcode，5 项新增 XCTest、Debug/Release 编译与第 8.9 节真机流程仍待新 Build 验收；推送不代表用户设备上的包已经包含修复。下一步用包含本次提交的包验证自动聚焦、连续删字、键盘上方完整可见与会员入口原名。
+
+### 193. 用户 16 项场景整体走查未发现阻断（2026-09-21）
+
+- 用户反馈：16 项简化场景已大致走查一遍，目前没有发现阻断问题。该证据记录为整体 smoke 结果，不把未提供逐项结果、Build、设备/iOS、录屏和失败注记的项目直接标记 `VERIFIED`。
+- 处理结论：已知的记账焦点/键盘问题和会员入口修复继续按新提交 `32a7c33` 进入后续包验收；不要求用户无目的重复已走过的场景。后续若出现具体失败，按对应场景重新打开定向任务。
+- 下一项：按封版收口顺序检查最终候选包、Xcode/XCTest 与真机证据、生产 Apple 验单/JWS 部署配置和审核账号；其中生产 401/线上密钥与最终包属于外部发布闭环，不在没有运行态证据时臆改代码或自动同步生产。
+
+### 194. 周记分享模板数量与带图模板筛选诊断（2026-09-21）
+
+- 范围：只读核对周记分享图模板目录、分享页动态资格、图片候选和票据/截图安全过滤；不修改模板数量、图片角色、周记叙事或分享 UI。
+- 结论：当前模板目录共 20 套，来自 `LaunchCoverTemplateCatalog.orderedTemplateIDs` 与 `CoverTemplateID`；分享页通过 `manuallyAvailableTemplateIDs` 按本周数据动态显示可用子集。准备阶段最多取 3 个 `memoryAnchors`，因此目录总数不等于当前用户能看到的数量。
+- 带图账单未出现带图模板的主要原因：分享样式层会排除 `.receipt`；收据/发票/支付截图还会被标记为 `receiptOrScreenshot`、禁止作为 Hero，并由适配器过滤。普通图片也必须先进入周记 `memoryAnchors`（候选分数、同账单/日期/商户去重、每周最多 3 张）、图片可读且通过 `isHeroEligible`，需要 Hero 的模板还必须有主叙事证据绑定。
+- 证据文件：`NativeDemoApp/CoverEngine/Templates/LaunchCoverTemplates.swift`、`NativeDemoApp/CoverEngine/Models/CoverContracts.swift`、`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`NativeDemoApp/Services/PhotoMemoryPromptPolicy.swift`、`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoApp/CoverEngine/Flow/LegacyWeeklyCoverAdapter.swift`、`NativeDemoAppTests/LaunchCoverTemplateTests.swift`。历史上 1.0 首发为 6 套，提交 `8d48e33` 扩展为当前 20 套。
+- 验证：只读源码与测试断言核对完成；未修改产品代码、未运行或重跑 Xcode/真机，不把本次诊断标为模板问题已修复。下一步如用户确认是普通生活照片仍被排除，再针对该账单记录的 `memoryAnchorRole`、候选分数、图片引用可读性和 `isHeroEligible` 做定向复现。
+
+### 195. 周记分享图生活感与表达层级方案评审（2026-09-21）
+
+- 范围：只评审当前 20 套 CoverEngine 的生活感、信息层级、图片上下文和排版精致度；不启动实现、不改变账单事实、隐私过滤、会员、分享权限或既有模板资格。
+- 主要发现：照片已有 `photoCaption`/媒体说明能力，但适配器当前传入 `caption: nil`，模板分配也未绑定媒体说明，因此图片更像装饰而不是一次具体生活记录；模板正文普遍复用 `lead/support/mark/timeline` 层级，底部 Footer 又固定平铺品牌、记录数、记录日和照片数，20 套模板容易变成“换皮肤”。
+- 建议优先级：1）为主图或一张辅助图补一条安全短说明（日期、用户标题/备注或中性分类事实）；2）按“照片先说话、文字先说话、照片与节奏并列”重分三类表达角色；3）降低 Footer 和照片数的视觉权重；4）长文优先换布局而不是缩小字体；5）辅助图按模板减少统一 `.fill` 裁切和重复圆角阴影。
+- 推荐方向：内部保留 20 套目录，但用户入口按 4～6 个表达家族呈现。核心三种构图为“一周一幕”（1 张代表图）、“生活拼页”（2～3 张图＋日期/事实标注）、“节奏手札”（无安全照片时用记录节奏和时间线承接）。所有文字只能来自已有账单/周记事实，不补写情绪、地点或因果。
+- 证据文件：`NativeDemoApp/CoverEngine/Flow/LegacyWeeklyCoverAdapter.swift`、`NativeDemoApp/CoverEngine/Templates/LaunchCoverTemplates.swift`、`NativeDemoApp/CoverEngine/Rendering/CoverCanvasRoot.swift`。本轮只读审阅完成，未修改产品代码、未运行 Xcode/真机；下一步需单独建立视觉表达实现任务，并在 `FLOW-73`～`FLOW-77` 真机签收后验证 0/1/2/3 图、长文、窄屏、大字和多主题。
+
+### 196. SHARE-VISUAL-ELEMENTS-01：现有模板生活元素与表达层级增强（2026-09-21）
+
+- 状态：`IN_PROGRESS`。用户明确不增加模板数量，只丰富现有模板元素，减少组件拼装感，提升生活感、精致度和表达感。
+- 允许范围：仅 `CoverEngine` 的照片说明传递、媒体说明布局、模板文字/照片层级、Footer 层级、图片处理细节及对应回归；保留 20 个模板 ID、现有动态资格、照片隐私/收据过滤、账单事实和分享权限。
+- 冻结边界：不新增模板、不改变周记/月章正文和事实来源、不生成账本外情绪/地点/因果、不降低 Hero/隐私门槛、不改会员、额度、同步、相册或旧分享实现退役边界。
+- 第一阶段目标：让 `SummaryMemoryAnchor.caption` 进入 `MediaDescriptor.caption` 并在主图/辅助图附近按模板安全显示；减少 Footer 平铺感；长文优先选择稳定布局；辅助图减少统一圆角阴影和无差别裁切。
+- 验收：0/1/2/3 张可用图片、收据/截图、长文、无备注、普通生活照片、窄屏和大字下，图片有日期/安全短说明时才显示说明，说明不重复主标题、不泄露金额/敏感文本，模板数量与资格不变；Windows 回归通过后记录 `CODE_DONE`，Xcode/真机前不标 `VERIFIED`。
+- 本轮实现：`SummaryMemoryAnchor.caption` 现在按安全规则生成日期与用户备注/既有场景标签，进入 `MediaDescriptor.caption`；模板分配和布局为已有照片位置增加说明层，渲染时以轻量渐变覆盖显示；新增照片说明传播与版面绑定回归，未增加模板 ID、未改变照片资格或票据过滤。
+- 修改文件：`NativeDemoApp/CoverEngine/Flow/LegacyWeeklyCoverAdapter.swift`、`NativeDemoApp/CoverEngine/Rendering/CoverCanvasRoot.swift`、`NativeDemoApp/CoverEngine/Templates/LaunchCoverTemplates.swift`、`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`NativeDemoAppTests/LaunchCoverTemplateTests.swift`，以及本台账。
+- 代码验证：`git diff --check` 通过；`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 通过，结果为 `release_repository_gate: OK`（保留既有 7 条软性文案提示）。
+- 当前状态：`CODE_DONE`。剩余风险：本环境没有 Xcode/Swift 工具链，尚未完成 Swift 编译、XCTest、窄屏/大字和 iPhone 真机视觉验收；推送的是源码提交，不代表测试包已更新。下一步使用包含本提交的测试包验证 0/1/2/3 张普通生活照片、用户备注、无备注、票据/截图、长文、导出一致性和多模板裁切。
+- 编译修复（2026-09-21）：稳定指纹中的 Swift 字符串插值误用了转义双引号，导致 `Unterminated string literal` 及后续作用域级联错误；已改为无嵌套转义的数组拼接，未改变指纹字段含义。修复后 `git diff --check` 与 Windows 发布门禁再次通过，仍待 macOS/Xcode 编译和真机验收。
+- 编译修复（2026-09-21）：`Dictionary(uniqueKeysWithValues:)` 的媒体说明映射补充 `[UUID: String]` 和闭包元组类型，消除 Swift 的 `Generic parameter 'Key/Value' could not be inferred`；未改变媒体说明内容或模板资格。修复后发布门禁再次通过。

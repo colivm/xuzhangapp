@@ -11,7 +11,9 @@ struct LaunchCoverTemplateDescriptor: Equatable, Sendable {
     let allowsHero: Bool
     let allowsDecoration: Bool
     let requiredHeroOrientation: MediaOrientation?
-    let automaticSceneKeys: Set<String>?
+    /// 本周需要多少个不同场景种类才解锁该模板。
+    /// `0` 表示通用模板：不受场景约束，任何周次都可被自动选中。
+    let minimumSceneKindCount: Int
     let minimumRecordedDayCount: Int
     let maximumLeadCharacterCount: Int
     let showsMasthead: Bool
@@ -31,7 +33,13 @@ struct LaunchCoverTemplateSelectionInput: Equatable, Sendable {
     let evidenceBoundHeroOrientations: Set<MediaOrientation>
     let recordedDayCount: Int
     let leadCharacterCount: Int
+    /// 本周被判定为有效场景的 `scene:<kind>` 标识集合。
+    /// 模板是否解锁由 `LaunchCoverTemplateDescriptor.minimumSceneKindCount`
+    /// 与这个集合的**元素个数**比较得出，不再要求命中指定场景。
     let sceneKeys: Set<String>
+
+    /// 本周解锁到的场景种类数。
+    var sceneKindCount: Int { sceneKeys.count }
 }
 
 enum LaunchCoverTemplateCatalog {
@@ -70,7 +78,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: true,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: nil,
+            minimumSceneKindCount: 1,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: 48,
             showsMasthead: true,
@@ -93,7 +101,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: true,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: nil,
+            minimumSceneKindCount: 1,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: 42,
             showsMasthead: true,
@@ -116,7 +124,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: true,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: nil,
+            minimumSceneKindCount: 1,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: 48,
             showsMasthead: false,
@@ -139,7 +147,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: false,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: nil,
+            minimumSceneKindCount: 0,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: .max,
             showsMasthead: true,
@@ -162,7 +170,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: true,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: nil,
+            minimumSceneKindCount: 1,
             minimumRecordedDayCount: 2,
             maximumLeadCharacterCount: 56,
             showsMasthead: true,
@@ -185,7 +193,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: false,
             allowsDecoration: true,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: nil,
+            minimumSceneKindCount: 0,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: 30,
             showsMasthead: true,
@@ -208,7 +216,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: false,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: nil,
+            minimumSceneKindCount: 0,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: 30,
             showsMasthead: false,
@@ -231,7 +239,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: true,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: nil,
+            minimumSceneKindCount: 1,
             minimumRecordedDayCount: 3,
             maximumLeadCharacterCount: 56,
             showsMasthead: true,
@@ -254,7 +262,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: true,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: ["scene:cityRoute", "scene:lodging"],
+            minimumSceneKindCount: 1,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: 42,
             showsMasthead: true,
@@ -277,7 +285,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: true,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: nil,
+            minimumSceneKindCount: 1,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: 48,
             showsMasthead: false,
@@ -300,7 +308,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: true,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: nil,
+            minimumSceneKindCount: 2,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: 48,
             showsMasthead: true,
@@ -323,7 +331,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: true,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: nil,
+            minimumSceneKindCount: 2,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: 42,
             showsMasthead: false,
@@ -346,7 +354,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: true,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: ["scene:cityRoute", "scene:lodging"],
+            minimumSceneKindCount: 2,
             minimumRecordedDayCount: 2,
             maximumLeadCharacterCount: 48,
             showsMasthead: true,
@@ -369,7 +377,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: true,
             allowsDecoration: false,
             requiredHeroOrientation: .portrait,
-            automaticSceneKeys: nil,
+            minimumSceneKindCount: 1,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: 30,
             showsMasthead: true,
@@ -392,7 +400,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: true,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: [],
+            minimumSceneKindCount: 3,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: 48,
             showsMasthead: true,
@@ -415,7 +423,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: true,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: ["scene:coffee"],
+            minimumSceneKindCount: 1,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: 48,
             showsMasthead: false,
@@ -438,7 +446,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: true,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: ["scene:homeSupply", "scene:groceries"],
+            minimumSceneKindCount: 2,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: 48,
             showsMasthead: true,
@@ -461,7 +469,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: true,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: [],
+            minimumSceneKindCount: 3,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: 48,
             showsMasthead: true,
@@ -484,7 +492,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: true,
             allowsDecoration: false,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: [],
+            minimumSceneKindCount: 3,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: 42,
             showsMasthead: false,
@@ -507,7 +515,7 @@ enum LaunchCoverTemplateCatalog {
             allowsHero: false,
             allowsDecoration: true,
             requiredHeroOrientation: nil,
-            automaticSceneKeys: nil,
+            minimumSceneKindCount: 0,
             minimumRecordedDayCount: 0,
             maximumLeadCharacterCount: 36,
             showsMasthead: true,
@@ -603,11 +611,17 @@ enum LaunchCoverTemplateCatalog {
         factPack: CoverFactPack
     ) -> CoverContentAllocationRequest {
         let descriptor = descriptorsByID[templateID] ?? descriptorsByID[.journal]!
+        let mediaCaptionAtomIDs: [UUID: String] = Dictionary(
+            uniqueKeysWithValues: factPack.media.compactMap { media -> (UUID, String)? in
+                guard let caption = media.caption else { return nil }
+                return (media.id, caption.id)
+            }
+        )
         return CoverContentAllocationRequest(
             mastheadAtomIDs: descriptor.showsMasthead ? [CoverFactAtomID.period] : [],
             storyLeadAtomID: factPack.story.id,
             storySupportAtomID: descriptor.showsSupport ? factPack.support?.id : nil,
-            mediaCaptionAtomIDs: [:],
+            mediaCaptionAtomIDs: mediaCaptionAtomIDs,
             markAtomIDs: Array(factPack.marks.prefix(descriptor.maximumMarkCount)).map(\.id),
             timelineAtomIDs: descriptor.usesTimeline
                 ? Array(factPack.context.timelineLabels.prefix(4)).map(\.id)
@@ -702,12 +716,18 @@ enum LaunchCoverTemplateCatalog {
         _ templateID: CoverTemplateID,
         for input: LaunchCoverTemplateSelectionInput
     ) -> Bool {
-        guard isStructurallyEligible(templateID, for: input),
-              let sceneKeys = descriptorsByID[templateID]?.automaticSceneKeys else {
-            return isStructurallyEligible(templateID, for: input)
-        }
-        guard !sceneKeys.isEmpty else { return false }
-        return !sceneKeys.isDisjoint(with: input.sceneKeys)
+        guard isStructurallyEligible(templateID, for: input) else { return false }
+        return isSceneUnlocked(templateID, for: input)
+    }
+
+    /// 场景闸门：本周解锁到的场景种类数达到模板要求才可自动选中。
+    /// `minimumSceneKindCount == 0` 的通用模板不受场景约束。
+    private static func isSceneUnlocked(
+        _ templateID: CoverTemplateID,
+        for input: LaunchCoverTemplateSelectionInput
+    ) -> Bool {
+        guard let descriptor = descriptorsByID[templateID] else { return false }
+        return input.sceneKindCount >= descriptor.minimumSceneKindCount
     }
 
     private static func isStructurallyEligible(
@@ -771,7 +791,7 @@ enum LaunchCoverTemplateLayoutResolver {
         recipe: CoverRecipe,
         allocation: ContentAllocationPlan
     ) -> ResolvedCoverLayout {
-        let bodyPlacements: [ResolvedCoverAtomPlacement]
+        var bodyPlacements: [ResolvedCoverAtomPlacement]
         let mediaPlacements: [ResolvedCoverMediaPlacement]
         switch recipe.template.templateID {
         case .heroStory:
@@ -930,6 +950,10 @@ enum LaunchCoverTemplateLayoutResolver {
                 ]
             )
         }
+        bodyPlacements.append(contentsOf: mediaCaptionAtoms(
+            allocation: allocation,
+            mediaPlacements: mediaPlacements
+        ))
         let layoutFingerprint = CoverStableIdentity.fingerprint([
             recipe.recipeID,
             recipe.template.templateID.rawValue,
@@ -947,6 +971,24 @@ enum LaunchCoverTemplateLayoutResolver {
             bodyAtomPlacements: bodyPlacements,
             mediaPlacements: mediaPlacements
         )
+    }
+
+    private static func mediaCaptionAtoms(
+        allocation: ContentAllocationPlan,
+        mediaPlacements: [ResolvedCoverMediaPlacement]
+    ) -> [ResolvedCoverAtomPlacement] {
+        mediaPlacements.compactMap { mediaPlacement in
+            guard let caption = allocation.mediaCaptions[mediaPlacement.mediaID] else {
+                return nil
+            }
+            return ResolvedCoverAtomPlacement(
+                atomID: caption.id,
+                frame: mediaPlacement.frame,
+                textRole: .caption,
+                alignment: .leading,
+                lineLimit: 1
+            )
+        }
     }
 
     private static func heroStoryAtoms(

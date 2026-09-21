@@ -2878,6 +2878,7 @@ struct SummaryPlaybackSheet: View {
                 id: anchor.id,
                 evidenceItemIDs: [anchor.itemID],
                 image: image,
+                caption: shareCoverMediaCaption(for: anchor),
                 privacyRisk: anchor.role == .receipt ? .receiptOrScreenshot : .safe,
                 allowsHero: anchor.role != .receipt,
                 requiresAnalysisForHero: anchor.role != .receipt,
@@ -2909,6 +2910,22 @@ struct SummaryPlaybackSheet: View {
             backgroundImage: backgroundImage,
             backgroundIdentity: backgroundIdentity
         )
+    }
+
+    private func shareCoverMediaCaption(for anchor: SummaryMemoryAnchor) -> String? {
+        let dateText = anchor.createdAt.zhBillDateOnly
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let storedCaption = anchor.caption.trimmingCharacters(in: .whitespacesAndNewlines)
+        let contextText: String
+        if !storedCaption.isEmpty,
+           !PhotoMemoryPromptPolicy.isAutomaticAnchorCaption(storedCaption) {
+            contextText = storedCaption
+        } else {
+            contextText = anchor.label.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let normalizedContext = contextText == "照片" ? "" : contextText
+        let components = [dateText, normalizedContext].filter { !$0.isEmpty }
+        return components.isEmpty ? nil : components.joined(separator: " · ")
     }
 
     @MainActor

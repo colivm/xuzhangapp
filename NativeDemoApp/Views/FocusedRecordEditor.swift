@@ -24,16 +24,12 @@ struct FocusedRecordEditor: View {
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var didAttachMemoryImage = false
     @State private var showDeleteConfirmation = false
-    @FocusState private var focusedField: FocusedField?
+    @FocusState private var isAmountFieldFocused: Bool
+    @State private var isNoteFieldFocused = false
 
     private enum EditorMode {
         case editing
         case categoryPicking
-    }
-
-    private enum FocusedField {
-        case amount
-        case note
     }
 
     init(
@@ -208,7 +204,7 @@ struct FocusedRecordEditor: View {
                     value: selectedCategory.rawValue,
                     isAccent: true
                 ) {
-                    focusedField = nil
+                    dismissKeyboard()
                     isDatePanelVisible = false
                     withAnimation(editorSpring) {
                         mode = .categoryPicking
@@ -223,7 +219,7 @@ struct FocusedRecordEditor: View {
                     value: selectedDate.zhBillDateTime,
                     isAccent: false
                 ) {
-                    focusedField = nil
+                    dismissKeyboard()
                     withAnimation(editorSpring) {
                         isDatePanelVisible.toggle()
                     }
@@ -411,7 +407,10 @@ struct FocusedRecordEditor: View {
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.center)
                 .font(.system(size: 34, weight: .bold, design: .rounded))
-                .focused($focusedField, equals: .amount)
+                .focused($isAmountFieldFocused)
+                .onChange(of: isAmountFieldFocused) { _, isFocused in
+                    if isFocused { isNoteFieldFocused = false }
+                }
                 .onChange(of: amountText) { _, value in
                     amountText = sanitizedAmountText(value)
                     validationMessage = nil
@@ -437,8 +436,11 @@ struct FocusedRecordEditor: View {
                 text: noteText,
                 placeholder: "这一笔想怎么被记住？",
                 isFocused: Binding(
-                    get: { focusedField == .note },
-                    set: { focusedField = $0 ? .note : nil }
+                    get: { isNoteFieldFocused },
+                    set: {
+                        isNoteFieldFocused = $0
+                        if $0 { isAmountFieldFocused = false }
+                    }
                 ),
                 font: .systemFont(ofSize: 14, weight: .semibold),
                 textAlignment: .right,
@@ -616,7 +618,8 @@ struct FocusedRecordEditor: View {
 
     private func dismissKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        focusedField = nil
+        isAmountFieldFocused = false
+        isNoteFieldFocused = false
     }
 
     private func commitNote(_ value: String) {

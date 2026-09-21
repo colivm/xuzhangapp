@@ -60,8 +60,14 @@ export const config = {
   appleIssuerId: process.env.APPLE_ISSUER_ID || "",
   appleKeyId: process.env.APPLE_KEY_ID || "",
   appleBundleId: process.env.APPLE_BUNDLE_ID || "",
+  appleAppAppleId: process.env.APPLE_APPLE_ID || "",
   applePrivateKeyPath: process.env.APPLE_PRIVATE_KEY_PATH || "",
   applePrivateKey: process.env.APPLE_PRIVATE_KEY || "",
+  appleRootCaPaths: process.env.APPLE_ROOT_CA_PATHS || [
+    resolve(__dirname, "..", "certs", "apple-root-ca-g2.cer"),
+    resolve(__dirname, "..", "certs", "apple-root-ca-g3.cer"),
+  ].join(","),
+  appleJwsOnlineChecks: process.env.APPLE_JWS_ONLINE_CHECKS === "true",
   appleAppStoreApiBaseUrl: process.env.APPLE_APP_STORE_API_BASE_URL || APPLE_PRODUCTION_API_BASE_URL,
   iapProductIds: {
     monthly: process.env.IAP_MONTHLY_PRODUCT_ID || "",
@@ -105,6 +111,7 @@ export function validateIAPEnvironmentConfig(nodeEnv = process.env.NODE_ENV, run
     ["APPLE_ISSUER_ID", runtimeConfig.appleIssuerId],
     ["APPLE_KEY_ID", runtimeConfig.appleKeyId],
     ["APPLE_BUNDLE_ID", runtimeConfig.appleBundleId],
+    ...(mode === "production" ? [["APPLE_APPLE_ID", runtimeConfig.appleAppAppleId]] : []),
     ["APPLE_PRIVATE_KEY_PATH or APPLE_PRIVATE_KEY", runtimeConfig.applePrivateKeyPath || runtimeConfig.applePrivateKey],
     ["IAP_MONTHLY_PRODUCT_ID", runtimeConfig.iapProductIds.monthly],
     ["IAP_YEARLY_PRODUCT_ID", runtimeConfig.iapProductIds.yearly],

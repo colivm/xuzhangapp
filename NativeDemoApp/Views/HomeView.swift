@@ -13,9 +13,104 @@ struct HomeNarrativePillColors {
     }
 }
 
-private struct TodaySwipeDragState: Equatable {
+private struct HomeTodaySwipeRow<Content: View, Actions: View>: View {
     let itemID: UUID
-    let translation: CGFloat
+    @Binding var openItemID: UUID?
+    let isEnabled: Bool
+    let animation: Animation?
+    let onTap: () -> Void
+    let content: Content
+    let actions: Actions
+
+    @GestureState private var dragTranslation: CGFloat = 0
+
+    init(
+        itemID: UUID,
+        openItemID: Binding<UUID?>,
+        isEnabled: Bool,
+        animation: Animation?,
+        onTap: @escaping () -> Void,
+        @ViewBuilder actions: () -> Actions,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.itemID = itemID
+        _openItemID = openItemID
+        self.isEnabled = isEnabled
+        self.animation = animation
+        self.onTap = onTap
+        self.actions = actions()
+        self.content = content()
+    }
+
+    private var isOpen: Bool {
+        isEnabled && openItemID == itemID
+    }
+
+    private var coordinateSpaceName: String {
+        "home-today-swipe-\(itemID.uuidString)"
+    }
+
+    private var rowOffset: CGFloat {
+        let restingOffset: CGFloat = isOpen ? -76 : 0
+        return min(0, max(-86, restingOffset + dragTranslation))
+    }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            actions
+
+            content
+                .offset(x: rowOffset)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onTap)
+                .overlay(alignment: .trailing) {
+                    if isEnabled {
+                        Color.clear
+                            .frame(maxWidth: isOpen ? .infinity : nil)
+                            .frame(width: isOpen ? nil : 42)
+                            .contentShape(Rectangle())
+                            .simultaneousGesture(swipeGesture)
+                    }
+                }
+        }
+        .coordinateSpace(name: coordinateSpaceName)
+        .animation(animation, value: isOpen)
+    }
+
+    private var swipeGesture: some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .named(coordinateSpaceName))
+            .updating($dragTranslation) { value, state, transaction in
+                let horizontal = value.translation.width
+                let vertical = value.translation.height
+                guard abs(horizontal) > max(16, abs(vertical) * 1.35) else { return }
+                let baseOffset: CGFloat = isOpen ? -76 : 0
+                state = min(86, max(-86, baseOffset + horizontal)) - baseOffset
+                transaction.disablesAnimations = true
+            }
+            .onEnded { value in
+                let horizontal = value.translation.width
+                let predictedHorizontal = value.predictedEndTranslation.width
+                let vertical = value.translation.height
+                let predictedVertical = value.predictedEndTranslation.height
+                let isHorizontalSwipe = abs(horizontal) > max(34, abs(vertical) * 1.45)
+                    || abs(predictedHorizontal) > max(62, abs(predictedVertical) * 1.35)
+                guard isHorizontalSwipe else {
+                    if abs(vertical) > abs(horizontal), isOpen {
+                        withAnimation(animation) {
+                            openItemID = nil
+                        }
+                    }
+                    return
+                }
+                withAnimation(animation) {
+                    if horizontal < -28 || predictedHorizontal < -56 {
+                        openItemID = itemID
+                    } else if horizontal > 24 || predictedHorizontal > 48 {
+                        openItemID = nil
+                    }
+                }
+            }
+    }
 }
 
 private enum PetBubbleSource: Equatable {
@@ -408,7 +503,6 @@ struct HomeView: View {
     @State private var memoryDetailDismissRoute: SheetDismissRoute?
     @State private var todayInlineEditingItemID: UUID?
     @State private var todaySwipedItemID: UUID?
-    @State private var todayDeletingItemID: UUID?
     @State private var todayPendingDeleteItem: HomeItem?
     @State private var showTodayDeleteConfirmation = false
     @State private var todayPlaybackPrompt: TodayPlaybackPrompt?
@@ -433,7 +527,6 @@ struct HomeView: View {
     @State private var quickRecordCardPulse = false
     @State private var quickRecordSaveMessage: String?
     @State private var quickRecordWeatherRefreshTick = 0
-    @GestureState private var todaySwipeDragState: TodaySwipeDragState?
     private let dailyQuotaStore = DailyFeatureQuotaStore()
     private let summaryQuotaStore = SummaryPlaybackQuotaStore()
     private static let todayPlaybackFirstUsePromptSeenKey = "today_playback_first_use_prompt_seen_v1"
@@ -449,7 +542,6 @@ struct HomeView: View {
                 ScrollView {
                     homeContent
                 }
-                .scrollDisabled(todaySwipeDragState != nil)
                 .onChange(of: todayBillsFocusTick) { _, _ in
                     withAnimation(.easeInOut(duration: 0.38)) {
                         proxy.scrollTo("todayBillsPanel", anchor: .center)
@@ -2025,7 +2117,7 @@ struct HomeView: View {
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundStyle(AppColors.readableSubtext)
 
-                            VStack(alignment: .leading, spacing: 8) {
+                            LazyVStack(alignment: .leading, spacing: 8) {
                                 ForEach(Array(homeViewModel.todayItems.enumerated()), id: \.element.id) { index, item in
                                     todayRecordInlineRow(item: item, isFirst: index == 0)
                                 }
@@ -2048,7 +2140,7 @@ struct HomeView: View {
                         }
                 }
                 .scrollIndicators(.hidden)
-                .scrollDisabled(todaySwipeDragState != nil || todayInlineEditingItemID != nil)
+                .scrollDisabled(todayInlineEditingItemID != nil)
                     .simultaneousGesture(
                         DragGesture(minimumDistance: 18).onEnded { value in
                             guard todaySwipedItemID != nil else { return }
@@ -2177,39 +2269,14 @@ struct HomeView: View {
 
     private func todayRecordInlineRow(item: HomeItem, isFirst: Bool) -> some View {
         let isEditing = todayInlineEditingItemID == item.id
-        let isSwiped = todaySwipedItemID == item.id && !isEditing
-        let isDeleting = todayDeletingItemID == item.id
-        let dragTranslation = todaySwipeDragState?.itemID == item.id ? todaySwipeDragState?.translation ?? 0 : 0
-        let restingOffset: CGFloat = isSwiped ? -76 : 0
-        let rowOffset = min(0, max(-86, restingOffset + dragTranslation))
-        return ZStack(alignment: .trailing) {
-            if !isEditing {
-                todaySwipeActions(for: item, isVisible: isSwiped)
-                    .padding(.trailing, 10)
-                    .zIndex(2)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                todayRecordSummary(item, isEditing: isEditing, isFirst: isFirst)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .background(todayRecordRowBackground(item: item, isEditing: isEditing))
-            .overlay(todayRecordRowBorder(item: item, isEditing: isEditing))
-            .overlay(alignment: .trailing) {
-                if !isEditing {
-                    todayRecordWatermark(for: item)
-                        .padding(.trailing, 10)
-                        .allowsHitTesting(false)
-                }
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
-            .offset(x: rowOffset)
-            .scaleEffect(isDeleting ? 0.96 : 1, anchor: .trailing)
-            .opacity(isDeleting ? 0 : 1)
-            .frame(height: isDeleting ? 0 : nil)
-            .clipped()
-            .onTapGesture {
+        let canSwipe = todayInlineEditingItemID == nil
+        let isSwiped = todaySwipedItemID == item.id && canSwipe
+        return HomeTodaySwipeRow(
+            itemID: item.id,
+            openItemID: $todaySwipedItemID,
+            isEnabled: canSwipe,
+            animation: todayEditSpring,
+            onTap: {
                 if todaySwipedItemID == item.id {
                     withAnimation(todayEditSpring) {
                         todaySwipedItemID = nil
@@ -2227,17 +2294,35 @@ struct HomeView: View {
                         }
                     }
                 }
-            }
-            .overlay(alignment: .trailing) {
-                if !isEditing {
-                    todaySwipeHandle(for: item, isSwiped: isSwiped)
-                        .zIndex(3)
+            },
+            actions: {
+                if canSwipe {
+                    todaySwipeActions(for: item, isVisible: isSwiped)
+                        .padding(.trailing, 10)
+                        .zIndex(2)
                 }
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 6) {
+                    todayRecordSummary(item, isEditing: isEditing, isFirst: isFirst)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .background(todayRecordRowBackground(item: item, isEditing: isEditing))
+                .overlay(todayRecordRowBorder(item: item, isEditing: isEditing))
+                .overlay(alignment: .trailing) {
+                    if !isEditing {
+                        todayRecordWatermark(for: item)
+                            .padding(.trailing, 10)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                .clipped()
             }
-        }
+        )
         .id(item.id)
-        .animation(todayEditSpring, value: isSwiped)
-        .animation(.easeInOut(duration: 0.45), value: isDeleting)
+        .transition(.identity)
     }
 
     private func todayRecordSummary(_ item: HomeItem, isEditing: Bool, isFirst: Bool) -> some View {
@@ -2689,8 +2774,8 @@ struct HomeView: View {
         AppColors.categoryColor(item.category)
     }
 
-    private var todayEditSpring: Animation {
-        .spring(response: 0.38, dampingFraction: 0.90, blendDuration: 0.08)
+    private var todayEditSpring: Animation? {
+        reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.90, blendDuration: 0.08)
     }
 
     private func todaySwipeActions(for item: HomeItem, isVisible: Bool) -> some View {
@@ -2710,6 +2795,8 @@ struct HomeView: View {
             .shadow(color: Color.red.opacity(0.22), radius: 12, y: 6)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("删除这条账单")
+        .accessibilityHidden(!isVisible)
         .frame(width: 76, alignment: .trailing)
         .opacity(isVisible ? 1 : 0)
         .scaleEffect(isVisible ? 1 : 0.82, anchor: .trailing)
@@ -2723,65 +2810,13 @@ struct HomeView: View {
         showTodayDeleteConfirmation = true
     }
 
-    private func todaySwipeHandle(for item: HomeItem, isSwiped: Bool) -> some View {
-        Color.clear
-            .frame(maxWidth: isSwiped ? .infinity : nil)
-            .frame(width: isSwiped ? nil : 42)
-            .contentShape(Rectangle())
-            .gesture(todayRowSwipeGesture(for: item))
-    }
-
-    private func todayRowSwipeGesture(for item: HomeItem) -> some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .local)
-            .updating($todaySwipeDragState) { value, state, _ in
-                let horizontal = value.translation.width
-                let vertical = value.translation.height
-                guard abs(horizontal) > max(16, abs(vertical) * 1.35) else { return }
-                let baseOffset: CGFloat = todaySwipedItemID == item.id ? -76 : 0
-                let translation = min(86, max(-86, baseOffset + horizontal)) - baseOffset
-                state = TodaySwipeDragState(itemID: item.id, translation: translation)
-            }
-            .onEnded { value in
-                let horizontal = value.translation.width
-                let predictedHorizontal = value.predictedEndTranslation.width
-                let vertical = value.translation.height
-                let predictedVertical = value.predictedEndTranslation.height
-                let isHorizontalSwipe = abs(horizontal) > max(34, abs(vertical) * 1.45)
-                    || abs(predictedHorizontal) > max(62, abs(predictedVertical) * 1.35)
-                if !isHorizontalSwipe {
-                    if abs(vertical) > abs(horizontal), todaySwipedItemID == item.id {
-                        withAnimation(todayEditSpring) {
-                            todaySwipedItemID = nil
-                        }
-                    }
-                    return
-                }
-                withAnimation(todayEditSpring) {
-                    if horizontal < -28 || predictedHorizontal < -56 {
-                        todaySwipedItemID = item.id
-                    } else if horizontal > 24 || predictedHorizontal > 48 {
-                        todaySwipedItemID = nil
-                    }
-                }
-            }
-    }
-
     private func deleteTodayRecord(_ item: HomeItem) {
+        // Only dismiss local UI after the model accepts the deletion, outside an animated transaction.
+        guard homeViewModel.deleteItem(id: item.id) else { return }
         if todayInlineEditingItemID == item.id {
             todayInlineEditingItemID = nil
         }
         todaySwipedItemID = nil
-        withAnimation(.easeInOut(duration: 0.45)) {
-            todayDeletingItemID = item.id
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-            if let idx = homeViewModel.items.firstIndex(where: { $0.id == item.id }) {
-                homeViewModel.delete(at: IndexSet(integer: idx))
-            }
-            if todayDeletingItemID == item.id {
-                todayDeletingItemID = nil
-            }
-        }
     }
 
     private func handleSheetDismissRoute(_ route: SheetDismissRoute?) {

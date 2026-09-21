@@ -37,6 +37,19 @@ observer = section(view, ".onChange(of: homeViewModel.inputTitle)", ".onChange(o
 assert "applyUserRecordTitle" not in observer and "applyRecommendedCategory" not in observer
 assert "markedTextRange" in view and "guard !isComposing else { return }" in view
 assert "guard rawValue != lastReportedText else { return }" in view
+# A UIKit responder needs persistent state, not an unregistered SwiftUI focus target.
+assert "@FocusState" not in view, "RecordView has no native SwiftUI focus target"
+assert "@FocusState" not in sheet, "RecordEditSheet has no native SwiftUI focus target"
+assert "@State private var focusedField: RecordField?" in view
+for editor in (sheet, focused):
+    assert "@State private var isNoteFieldFocused" in editor
+assert ".focused($isAmountFieldFocused)" in focused, "the native amount field still needs FocusState"
+assert "focusedField == .note" not in focused, "note callbacks must not clear the native amount focus"
+assert ".padding(.bottom, focusedField == .note ? keyboardBottomOverlap : 0)" in view
+assert "RecordKeyboardViewportReader { keyboardBottomOverlap = $0 }" in view
+assert "keyboardDidShowNotification" in view, "reposition after the actual keyboard presentation"
+assert 'view.subviews' not in section(view, "struct RecordKeyboardViewportReader", "struct CommittedRecordNoteField"), "avoid inspecting private SwiftUI scroll-view hierarchies"
+assert 'window.convert(keyboardScreenFrame, from: window.screen.coordinateSpace)' in view
 preview = section(view, "private var uncachedPreviewDraftResolution:", "private var automaticPreviewEmotion:")
 assert "homeViewModel.resolvedManualRecordDraft(" in preview
 candidate = section(view, "private func requestHandwrittenPolishCandidate(", "private func adoptHandwrittenPolishCandidate(")
@@ -79,4 +92,4 @@ for name in ("testShoppingThenNightSnackWinsBeforeSaveAndSurvivesDecodedEdits",
              "testNewBrandIntentAndOldBrandUnbinding"):
     assert name in tests, name
 
-print("record_continuous_intent_regression: OK (input provenance, shared decisions, candidate isolation, both editors, no-op before side effects; source checks only)")
+print("record_continuous_intent_regression: OK (input provenance, UIKit focus ownership, keyboard avoidance, shared decisions, candidate isolation, both editors, no-op before side effects; source checks only)")

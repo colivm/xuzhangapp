@@ -105,7 +105,8 @@ private struct CoverTemplateBodyRenderer: View {
             )
 
             ForEach(renderInput.layout.bodyAtomPlacements) { placement in
-                if let atom = bodyAtomsByID[placement.atomID] {
+                if placement.textRole != .caption,
+                   let atom = bodyAtomsByID[placement.atomID] {
                     Text(atom.text)
                         .font(font(for: placement.textRole))
                         .foregroundStyle(textColor(for: placement.textRole))
@@ -129,6 +130,39 @@ private struct CoverTemplateBodyRenderer: View {
                 if let image = renderInput.preparedImagesByID[placement.mediaID] {
                     coverImage(image, placement: placement)
                         .zIndex(Double(placement.zIndex))
+                }
+            }
+
+            ForEach(renderInput.layout.bodyAtomPlacements.filter { $0.textRole == .caption }) { placement in
+                if let atom = bodyAtomsByID[placement.atomID] {
+                    Text(atom.text)
+                        .font(font(for: .caption))
+                        .foregroundStyle(Color.white.opacity(0.94))
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(placement.lineLimit)
+                        .minimumScaleFactor(0.78)
+                        .padding(.horizontal, 12)
+                        .frame(
+                            width: CGFloat(placement.frame.width),
+                            height: CGFloat(placement.frame.height),
+                            alignment: .bottomLeading
+                        )
+                        .padding(.horizontal, 12)
+                        .background(
+                            LinearGradient(
+                                colors: [
+                                    Color.black.opacity(0.46),
+                                    Color.black.opacity(0.04),
+                                ],
+                                startPoint: .bottom,
+                                endPoint: .top
+                            )
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .offset(
+                            x: CGFloat(placement.frame.x),
+                            y: CGFloat(placement.frame.y)
+                        )
                 }
             }
         }
@@ -223,7 +257,7 @@ private struct CoverTemplateBodyRenderer: View {
                 design: usesSerif ? .serif : .default
             )
         case .caption:
-            return .system(size: 12, weight: .medium, design: .default)
+            return .system(size: 11, weight: .medium, design: .rounded)
         case .mark:
             return .system(size: 12, weight: .semibold, design: .default)
         case .timeline:

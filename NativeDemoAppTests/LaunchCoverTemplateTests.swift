@@ -138,7 +138,8 @@ final class LaunchCoverTemplateTests: XCTestCase {
         }
     }
 
-    func testAutomaticSceneCandidatesRemainSeparateFromManualCatalog() {
+    func testAutomaticTemplatesUnlockBySceneKindCountInsteadOfNamedScenes() {
+        // 场景不足：只有通用模板可自动选中，分享功能不失效。
         let noScene = selectionInput(
             preferredTemplateID: nil,
             photoCount: 2,
@@ -149,30 +150,131 @@ final class LaunchCoverTemplateTests: XCTestCase {
 
         for templateID in [
             CoverTemplateID.postcard, .travelNote, .natureDiary, .coffeeStory,
-            .warmHome, .nightStory, .ocean,
+            .warmHome, .nightStory, .ocean, .heroStory, .magazine, .film,
+            .editorial, .memoryWall, .scrapbook, .bookCover, .memoryFocus,
+            .timeline,
         ] {
-            XCTAssertTrue(manual.contains(templateID))
-            XCTAssertFalse(automatic.contains(templateID))
+            XCTAssertTrue(manual.contains(templateID), "\(templateID.rawValue) should stay manual")
+            XCTAssertFalse(
+                automatic.contains(templateID),
+                "\(templateID.rawValue) must stay locked without scenes"
+            )
+        }
+        // 通用池在任何场景数量下都可自动选中，保证退化路径能出图。
+        for templateID in [
+            CoverTemplateID.journal, .minimal, .quote, .quietEditorial,
+        ] {
+            XCTAssertTrue(
+                automatic.contains(templateID),
+                "\(templateID.rawValue) is a universal template and must never lock"
+            )
         }
 
-        let matched = selectionInput(
+        // 恰好一种场景：只解锁 minimumSceneKindCount == 1 的模板。
+        let oneScene = selectionInput(
             preferredTemplateID: nil,
             photoCount: 2,
-            sceneKeys: [
-                "scene:cityRoute", "scene:lodging", "scene:coffee",
-                "scene:homeSupply", "scene:groceries",
-            ]
+            sceneKeys: ["scene:coffee"]
         )
-        let matchedAutomatic = LaunchCoverTemplateCatalog.availableTemplateIDs(for: matched)
-        for templateID in [
-            CoverTemplateID.postcard, .travelNote, .coffeeStory, .warmHome,
-        ] {
-            XCTAssertTrue(matchedAutomatic.contains(templateID))
+        let oneSceneAutomatic = LaunchCoverTemplateCatalog.availableTemplateIDs(for: oneScene)
+        for templateID in [CoverTemplateID.heroStory, .magazine, .memoryFocus, .film,
+                           .postcard, .coffeeStory, .scrapbook] {
+            XCTAssertTrue(
+                oneSceneAutomatic.contains(templateID),
+                "\(templateID.rawValue) unlocks at one scene kind"
+            )
         }
+        for templateID in [CoverTemplateID.editorial, .memoryWall, .warmHome,
+                           .travelNote, .natureDiary, .nightStory, .ocean] {
+            XCTAssertFalse(
+                oneSceneAutomatic.contains(templateID),
+                "\(templateID.rawValue) needs at least two scene kinds"
+            )
+        }
+
+        // 场景种类数单调递增：种类越多，自动可选集合只增不减。
+        let twoScene = selectionInput(
+            preferredTemplateID: nil,
+            photoCount: 2,
+            sceneKeys: ["scene:coffee", "scene:groceries"]
+        )
+        let twoSceneAutomatic = LaunchCoverTemplateCatalog.availableTemplateIDs(for: twoScene)
+        XCTAssertTrue(Set(oneSceneAutomatic).isSubset(of: Set(twoSceneAutomatic)))
+        for templateID in [CoverTemplateID.editorial, .memoryWall, .warmHome, .travelNote] {
+            XCTAssertTrue(
+                twoSceneAutomatic.contains(templateID),
+                "\(templateID.rawValue) unlocks at two scene kinds"
+            )
+        }
+        for templateID in [CoverTemplateID.natureDiary, .nightStory, .ocean] {
+            XCTAssertFalse(
+                twoSceneAutomatic.contains(templateID),
+                "\(templateID.rawValue) needs three scene kinds"
+            )
+        }
+
+        // 场景丰富：三个场景专属模板也应解锁。
+        let threeScene = selectionInput(
+            preferredTemplateID: nil,
+            photoCount: 2,
+            sceneKeys: ["scene:coffee", "scene:groceries", "scene:leisure"]
+        )
+        let threeSceneAutomatic = LaunchCoverTemplateCatalog.availableTemplateIDs(for: threeScene)
+        for templateID in [CoverTemplateID.natureDiary, .nightStory, .ocean] {
+            XCTAssertTrue(
+                threeSceneAutomatic.contains(templateID),
+                "\(templateID.rawValue) unlocks at three scene kinds"
+            )
+        }
+        // 场景键内容不影响解锁结果，只有种类数影响。
+        let relabeled = selectionInput(
+            preferredTemplateID: nil,
+            photoCount: 2,
+            sceneKeys: ["scene:cityRoute", "scene:lodging", "scene:social"]
+        )
+        XCTAssertEqual(
+            LaunchCoverTemplateCatalog.availableTemplateIDs(for: relabeled),
+            threeSceneAutomatic
+        )
+    }
+
+    func testUniversalTemplatesNeverRequireScenes() throws {
         for templateID in [
-            CoverTemplateID.natureDiary, .nightStory, .ocean,
+            CoverTemplateID.journal, .minimal, .quote, .quietEditorial,
         ] {
-            XCTAssertFalse(matchedAutomatic.contains(templateID))
+            let descriptor = try XCTUnwrap(
+                LaunchCoverTemplateCatalog.descriptor(for: templateID)
+            )
+            XCTAssertEqual(
+                descriptor.minimumSceneKindCount,
+                0,
+                "\(templateID.rawValue) is part of the universal fallback pool"
+            )
+        }
+
+        // 其余模板必须要求场景，否则场景闸门形同虚设。
+        for templateID in LaunchCoverTemplateCatalog.orderedTemplateIDs
+        where ![CoverTemplateID.journal, .minimal, .quote, .quietEditorial]
+            .contains(templateID) {
+            let descriptor = try XCTUnwrap(
+                LaunchCoverTemplateCatalog.descriptor(for: templateID)
+            )
+            XCTAssertGreaterThanOrEqual(descriptor.minimumSceneKindCount, 1)
+        }
+    }
+
+    func testSceneKindCountThresholdsStayWithinSupportedRange() throws {
+        for templateID in LaunchCoverTemplateCatalog.orderedTemplateIDs {
+            let descriptor = try XCTUnwrap(
+                LaunchCoverTemplateCatalog.descriptor(for: templateID)
+            )
+            XCTAssertGreaterThanOrEqual(descriptor.minimumSceneKindCount, 0)
+            // 上限收紧到 3，避免出现永远无法解锁的模板。
+            XCTAssertLessThanOrEqual(
+                descriptor.minimumSceneKindCount,
+                3,
+                "\(templateID.rawValue) can never unlock at this threshold"
+            )
         }
     }
 
@@ -224,6 +326,30 @@ final class LaunchCoverTemplateTests: XCTestCase {
         XCTAssertTrue(receipt.preparedImagesByID.isEmpty)
         XCTAssertEqual(receipt.unavailableMediaCount, 1)
         XCTAssertNotEqual(receipt.recipe.template.templateID, .heroStory)
+    }
+
+    func testPhotoCaptionsBecomeEvidenceBoundOverlayPlacements() throws {
+        let input = try LegacyWeeklyCoverAdapter.prepareSession(
+            from: makeSource(
+                variantID: "warmLight",
+                mediaCount: 1,
+                caption: "7月17日 · 见面",
+                recordedDayCount: 4
+            )
+        ).previewRenderInput
+
+        let caption = try XCTUnwrap(input.allocation.mediaCaptions.values.first)
+        XCTAssertEqual(caption.role, .photoCaption)
+        XCTAssertEqual(caption.text, "7月17日 · 见面")
+
+        let placement = try XCTUnwrap(
+            input.layout.bodyAtomPlacements.first {
+                $0.atomID == caption.id && $0.textRole == .caption
+            }
+        )
+        let mediaPlacement = try XCTUnwrap(input.layout.mediaPlacements.first)
+        XCTAssertEqual(placement.frame, mediaPlacement.frame)
+        XCTAssertTrue(input.recipe.media.map(\.mediaID).contains(mediaPlacement.mediaID))
     }
 
     func testLongQuoteAndMinimalCopyFallBackToExpandedJournalLayout() throws {
@@ -469,6 +595,7 @@ final class LaunchCoverTemplateTests: XCTestCase {
         allowsHero: Bool = true,
         privacyRisk: CoverMediaPrivacyRisk = .safe,
         leadText: String = "下班路上，也把这一刻留了下来",
+        caption: String? = nil,
         recordedDayCount: Int
     ) -> LegacyWeeklyCoverSource {
         let evidenceIDs = (0..<max(1, mediaCount)).map { index in
@@ -551,6 +678,7 @@ final class LaunchCoverTemplateTests: XCTestCase {
                 id: UUID(uuidString: String(format: "42000000-0000-0000-0000-%012d", index + 1))!,
                 evidenceItemIDs: [evidenceIDs[index]],
                 image: makeImage(index: index),
+                caption: index == 0 ? caption : nil,
                 privacyRisk: privacyRisk,
                 allowsHero: allowsHero
             )

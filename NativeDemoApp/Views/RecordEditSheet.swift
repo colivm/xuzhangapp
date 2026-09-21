@@ -167,7 +167,7 @@ struct RecordEditSheet: View {
     @State private var selectedEditPhotos: [PhotosPickerItem] = []
     @State private var didAttachMemoryImage = false
     @State private var showDeleteConfirmation = false
-    @FocusState private var isNoteFieldFocused: Bool
+    @State private var isNoteFieldFocused = false
     @Environment(\.dismiss) private var dismiss
 
     init(
@@ -493,7 +493,7 @@ struct RecordEditSheet: View {
         CommittedRecordNoteField(
             text: titleText,
             placeholder: "这一笔想怎么被记住？",
-            isFocused: Binding(get: { isNoteFieldFocused }, set: { isNoteFieldFocused = $0 }),
+            isFocused: $isNoteFieldFocused,
             onCommittedChange: commitNote,
             onSubmit: dismissKeyboard
         )
@@ -600,6 +600,7 @@ struct RecordEditSheet: View {
 
     private func focusEditNoteField(_ proxy: ScrollViewProxy) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            guard noteEditorExpanded else { return }
             isNoteFieldFocused = true
             scrollEditNoteFieldIntoView(proxy)
         }
