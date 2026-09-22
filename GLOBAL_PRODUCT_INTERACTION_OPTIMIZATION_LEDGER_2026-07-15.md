@@ -6105,3 +6105,10 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 修复范围：`ci_scripts/ci_pre_xcodebuild.sh` 不再依赖脚本启动时的当前目录；无 `CI_PRIMARY_REPOSITORY_PATH` 时从脚本位置推导仓库根目录，保留 `CI_BUILD_NUMBER` 对 `NativeDemoApp/Info.plist` 的覆盖；写入失败和 `CFBundleVersion` 回读不一致时输出明确错误并退出。
 - 本地验证：shell 语法检查、`git diff --check` 和 Windows 发布门禁需在本轮修复后重新执行；Windows 环境无法运行 macOS 的 `/usr/libexec/PlistBuddy`，因此不冒充 Xcode Cloud 脚本成功。
 - 状态与下一步：`RELEASE-02` 继续为 `BLOCKED`。修复完成后需重新运行 Xcode Cloud workflow，查看脚本输出是否完成 `Set CFBundleVersion to <CI_BUILD_NUMBER>`，随后继续运行 Test action，确认 `NativeDemoAppTests` 编译与执行结果。生产分支、IAP/StoreKit 行为和未跟踪资料未改。
+
+### 205. RELEASE-02：Xcode Cloud pre-xcodebuild 根目录探测与 PlistBuddy 回退（2026-09-22）
+
+- 用户再次反馈 `ci_pre_xcodebuild.sh` 以退出码 1 失败，但 Xcode Cloud 摘要仍未包含具体 stderr，因此无法把失败阶段归因到路径或版本号写入。
+- 修复范围：脚本现在按 `CI_PRIMARY_REPOSITORY_PATH`、当前目录、脚本上级目录和脚本目录依次探测 `NativeDemoApp/Info.plist`；写入优先使用 `/usr/libexec/PlistBuddy`，失败或不可用时回退 `/usr/bin/plutil`，最后用 `plutil` 回读校验 `CFBundleVersion`。
+- 本地验证边界：`git diff --check` 和 Windows 发布门禁可执行；Windows 无 macOS 的 `PlistBuddy`/`plutil`，不冒充脚本运行成功。Xcode Cloud 重新运行后应先看到 `Using Info.plist at ...`，再看到 `Set CFBundleVersion to ...`；若失败，日志会指出根目录探测、写入或回读阶段。
+- 状态：`RELEASE-02` 继续 `BLOCKED`。生产分支、IAP/StoreKit 行为和未跟踪资料未改；待脚本通过后继续验证 Test action、Archive 与完整 XCTest。
