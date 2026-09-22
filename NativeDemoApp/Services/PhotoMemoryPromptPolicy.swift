@@ -372,6 +372,12 @@ enum PhotoMemoryPromptPolicy {
         if containsAny(text, vehicleEvidenceKeywords) || containsAny(text, travelKeywords) {
             return false
         }
+        // A title can mention when an experience happened (for example,
+        // "下班后看电影") without describing a commute. Preserve the stronger
+        // experience evidence so automatic photo metadata can be reassigned.
+        if item.category == .entertainment && containsAny(text, experienceKeywords) {
+            return false
+        }
         if signal.kind == .commute { return true }
         if item.category == .transport, item.amount <= 80, containsAny(text, commuteKeywords) {
             return true

@@ -6150,3 +6150,11 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 根因二：Xcode Cloud Test action 仍以 8 个 worker 执行时，`LifeNarrativeAIRewriteStore` 等共享测试单例会被其他套件清空或覆盖，造成同一测试中显式 publish 后读取为 `nil`。共享 Scheme 已标记 `parallelizable = NO`，但必须在 Xcode Cloud workflow 的 Test action 将并行 worker 设为 1/关闭 parallel testing 后复跑，不能把这类污染当成产品断言逐条修改。
 - 修改文件：`NativeDemoApp/Services/PhotoMemoryPromptPolicy.swift` 与本台账。未修改 IAP/StoreKit、生产分支或未跟踪资料。
 - 状态：`CODE_DONE`；Windows 仍只能做静态门禁，需用包含本修复的提交在 Xcode Cloud 串行 Test action 复跑，确认真实剩余失败，再处理独立逻辑问题。`RELEASE-02` 继续 `BLOCKED`。
+
+### 211. RELEASE-02：修复分享卡片敏感照片文案与体验照片重算（2026-09-22）
+
+- 用户反馈：Xcode Cloud 最新 Test action 仍有运行期断言失败；首个失败是健康/照护照片分享卡片泄露原始 caption，另有自动照片编辑为“下班后看电影”后角色和场景提示被清空。
+- 根因与修复：`lifeSliceSafeSharePhotoCaption` 之前直接复用普通照片 caption，现对 `.careRecord` 按 `.healthRecord`/其他照护场景固定输出“一条健康记录”/“一条照护记录”；`PhotoMemoryPromptPolicy.isRoutineCommute` 之前把包含“下班”的娱乐标题按通勤信号拦截，现保留明确电影/展览等体验证据，允许自动照片元数据重算为 `.moment` + `.experience`。
+- 修改文件：`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`NativeDemoApp/Services/PhotoMemoryPromptPolicy.swift` 和本台账。未修改 IAP/StoreKit、后端、生产分支或未跟踪资料。
+- 验证边界：已完成 `git diff --check`；Windows 没有 Swift/Xcode，无法本地执行 XCTest。提交后必须用包含本节改动的同一 commit 在 Xcode Cloud Test action 重新运行，并将 Test action 并行 worker 设为 1/关闭 parallel testing 后再判断剩余失败。
+- 状态与剩余风险：本节源码为 `CODE_DONE`；`RELEASE-02` 继续 `BLOCKED`。附件中其他 LifeNarrative、Discover、输入辅助和 IAP 失败尚未证明是独立产品缺陷，需在串行且确认 commit 的新日志中复核。
