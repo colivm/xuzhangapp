@@ -6098,3 +6098,10 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 自动验证：`git diff --check` 通过；`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 退出码 0，末尾为 `release_repository_gate: OK`。夹具、真实照片、IAP 环境模板、staging 分支配置、语义/输入回归、静态检查、backend AI proxy、copy lint 和仓库接线断言均通过；copy lint 保留既有 7 条 soft warning。
 - 外部验证边界：本轮未在 Windows 冒充 macOS/Xcode XCTest 通过。需要用包含这些修复的同一 commit 重新运行 Xcode Cloud `Test action`，确认 `NativeDemoAppTests` 的实际通过/失败数量以及是否仍有 Swift 编译错误；用户此前确认的 Xcode Cloud 编译成功不能替代 Test action、Archive、device-audit、Instruments 或真机矩阵证据。
 - 状态与剩余风险：`RELEASE-02` 继续为 `BLOCKED`。当前阻塞不再是已反馈的 Swift 编译错误，而是完整 XCTest、Debug/Release Archive/Build 10、设备容器 audit、权限/无障碍、性能 Instruments 和其他封版真机证据尚未闭环。修复已提交为 `f3245141afbdece3e8793ad7e688a63006cb01df` 并推送到 `origin/feature/xuzhangapp-staging`；未部署，生产分支与 IAP/StoreKit 行为未改。
+
+### 204. RELEASE-02：Xcode Cloud pre-xcodebuild 脚本路径与回读诊断修复（2026-09-22）
+
+- 用户反馈：Xcode Cloud 在执行 `ci_pre_xcodebuild.sh` 阶段直接以退出码 1 失败，未提供更具体的脚本 stderr。
+- 修复范围：`ci_scripts/ci_pre_xcodebuild.sh` 不再依赖脚本启动时的当前目录；无 `CI_PRIMARY_REPOSITORY_PATH` 时从脚本位置推导仓库根目录，保留 `CI_BUILD_NUMBER` 对 `NativeDemoApp/Info.plist` 的覆盖；写入失败和 `CFBundleVersion` 回读不一致时输出明确错误并退出。
+- 本地验证：shell 语法检查、`git diff --check` 和 Windows 发布门禁需在本轮修复后重新执行；Windows 环境无法运行 macOS 的 `/usr/libexec/PlistBuddy`，因此不冒充 Xcode Cloud 脚本成功。
+- 状态与下一步：`RELEASE-02` 继续为 `BLOCKED`。修复完成后需重新运行 Xcode Cloud workflow，查看脚本输出是否完成 `Set CFBundleVersion to <CI_BUILD_NUMBER>`，随后继续运行 Test action，确认 `NativeDemoAppTests` 编译与执行结果。生产分支、IAP/StoreKit 行为和未跟踪资料未改。
