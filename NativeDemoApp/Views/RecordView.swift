@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import Combine
 
 enum RecordEntryMode: String, CaseIterable, Identifiable {
     case manual = "手动录入"

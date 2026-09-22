@@ -1087,7 +1087,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 | 5 | INT-02 | 保存后提示预算 | `CODE_DONE` | 减少主动打断；不改变照片/奖励资格、回放扣额和会员常量 |
 | 6 | DATA-06 | 本地备份导入与恢复 | `CODE_DONE` | 校验、预览、冲突与回滚优先；不得覆盖现有账本后才报告失败 |
 | 7 | MEMBER-02 | 会员登录直达与登录后续购 | `CODE_DONE` | 保持 Product ID、价格、权益验证与账号绑定规则 |
-| 8 | RELEASE-02 | 统一 Xcode/真机签收 | `BLOCKED` | 最后执行 Debug/Release、XCTest、iPhone、StoreKit、权限和无障碍矩阵 |
+| 8 | RELEASE-02 | 统一 Xcode/真机签收 | `BLOCKED` | Windows 仓库门禁已通过；生产候选仍需同步门禁修复并完成 macOS/Xcode、Archive、XCTest、iPhone、StoreKit、权限、无障碍与 Instruments 外部签收 |
 
 ### COPY-01：修复用户可见乱码
 
@@ -6024,7 +6024,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ### 196. SHARE-VISUAL-ELEMENTS-01：现有模板生活元素与表达层级增强（2026-09-21）
 
-- 状态：`IN_PROGRESS`。用户明确不增加模板数量，只丰富现有模板元素，减少组件拼装感，提升生活感、精致度和表达感。
+- 状态：`CODE_DONE`。用户明确不增加模板数量，只丰富现有模板元素，减少组件拼装感，提升生活感、精致度和表达感。
 - 允许范围：仅 `CoverEngine` 的照片说明传递、媒体说明布局、模板文字/照片层级、Footer 层级、图片处理细节及对应回归；保留 20 个模板 ID、现有动态资格、照片隐私/收据过滤、账单事实和分享权限。
 - 冻结边界：不新增模板、不改变周记/月章正文和事实来源、不生成账本外情绪/地点/因果、不降低 Hero/隐私门槛、不改会员、额度、同步、相册或旧分享实现退役边界。
 - 第一阶段目标：让 `SummaryMemoryAnchor.caption` 进入 `MediaDescriptor.caption` 并在主图/辅助图附近按模板安全显示；减少 Footer 平铺感；长文优先选择稳定布局；辅助图减少统一圆角阴影和无差别裁切。
@@ -6035,3 +6035,66 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 当前状态：`CODE_DONE`。剩余风险：本环境没有 Xcode/Swift 工具链，尚未完成 Swift 编译、XCTest、窄屏/大字和 iPhone 真机视觉验收；推送的是源码提交，不代表测试包已更新。下一步使用包含本提交的测试包验证 0/1/2/3 张普通生活照片、用户备注、无备注、票据/截图、长文、导出一致性和多模板裁切。
 - 编译修复（2026-09-21）：稳定指纹中的 Swift 字符串插值误用了转义双引号，导致 `Unterminated string literal` 及后续作用域级联错误；已改为无嵌套转义的数组拼接，未改变指纹字段含义。修复后 `git diff --check` 与 Windows 发布门禁再次通过，仍待 macOS/Xcode 编译和真机验收。
 - 编译修复（2026-09-21）：`Dictionary(uniqueKeysWithValues:)` 的媒体说明映射补充 `[UUID: String]` 和闭包元组类型，消除 Swift 的 `Generic parameter 'Key/Value' could not be inferred`；未改变媒体说明内容或模板资格。修复后发布门禁再次通过。
+
+### 197. RELEASE-02：1.0 封版检查（2026-09-22）
+
+- 状态：`IN_PROGRESS` → `BLOCKED`。本轮只执行封版前仓库、分支、版本、门禁与外部环境审计；不新增产品功能，不部署、不提交推送、不修改生产分支。个人 AI 文案池继续留在 2.0，不纳入 1.0。
+- 工作区与候选：当前分支 `feature/xuzhangapp-staging`，HEAD/远端均为 `2aeb015`；远端生产分支为 `xuzhang1.0-release-2026@5345c84`，本地生产分支为 `77b90a3`，两者差异仅生产签收文档提交。既有未跟踪 `PERSONAL_AI_COPY_POOL_TASK_2026-09-17.md`、`brand-assets/**`、`output/`、`tmp/`、`scripts/__pycache__/` 和截图/图标脚本全部保留，未纳入本轮范围。
+- 允许范围与实际修改：仅更新 `scripts/experience_static_check.ps1` 的两处封版接线守卫，使其匹配当前 20 套封面模板的 `minimumSceneKindCount` 字段和测试名 `testAutomaticTemplatesUnlockBySceneKindCountInsteadOfNamedScenes`；本台账同步回填本节及 RELEASE-02 状态。未修改产品 Swift、工程配置、会员/IAP、同步、账单、照片、官网或用户数据。
+- Windows staging 证据：
+  - `python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 退出 0，输出 `release_repository_gate: OK`。
+  - `python scripts/validate_release_gate.py --phase fixtures` 通过；100/1,000/5,000 条夹具摘要保持 `f3a282ed166f`、`0117d6c97b78`、`6c597531a746`，真实照片夹具 3 张均通过 12MP/字节/SHA 校验。
+  - `npm test --prefix backend` 通过，含 Apple JWS 有效/篡改/错误算法/不受信根及 153 项 IAP 路由场景；`npm test --prefix ai-proxy` 通过 24 项。
+  - `python scripts/app_store_metadata_check.py`、`theme_catalog_check.py`、`life_semantic_regression.py`、`record_continuous_intent_regression.py`、`first_use_permissions_sync_regression.py`、`git diff --check` 均通过；copy lint 仍有既有 7 条 soft warning，不作为硬失败。
+- 生产分支隔离核对：原始 `origin/xuzhang1.0-release-2026@5345c84` 的 Windows gate 在旧 `experience_static_check.ps1` 处失败，原因是脚本仍查找已被当前模板提交改名的 XCTest/字段。将本轮两处脚本修复仅复制到临时生产 worktree 后，生产配置检查（无 `STAGING`）及完整 repository gate 通过；生产分支本身尚未写入该修复，因此不能把原始生产候选记为 gate 通过，也未将临时副本视为交付。
+- 版本与配置审计：`Info.plist` 为 `CFBundleShortVersionString=1.0`、`CFBundleVersion=10`、显示名“叙账”；App target Debug/Release 的 `MARKETING_VERSION=1.0`、Bundle ID `com.xuzhang.app`、`TARGETED_DEVICE_FAMILY=1`、iOS 17 均符合封版目标。工程 `CURRENT_PROJECT_VERSION=1` 与 plist Build 10 不一致，需在 macOS Archive 产物中确认最终 `CFBundleVersion` 是否为 10，不能只凭源码字段签收。
+- 外部阻塞与剩余风险：本机 Windows 未提供 `xcodebuild`、Swift、`simctl`、`instruments`。因此 Debug/Release Clean Build、全部 XCTest、Archive、设备容器 audit、iPhone 15/SE 真机、100/1,000/5,000 条性能与真实照片内存、PHOTO/FIX/备份/恢复/双设备同步、StoreKit Production/Sandbox、首次定位/弱网、VoiceOver/Dynamic Type/Reduce Motion 均仍为 `NOT_RUN`/`BLOCKED`。生产 Apple JWS 的 `APPLE_APPLE_ID`、根证书/依赖部署、真实验单及历史 Production 401 授权闭环也未取得线上证据；App Store Connect 商品/价格/审核账号/协议税务银行仍未在线核对。
+- 冻结边界复核：未改变账单金额/日期/分类、OCR/AI 事实边界、免费额度常量、会员 Product ID/价格/购买恢复、JSON/云端 DTO、照片云端边界、回放/周月章文案、主题/宠物/天气/同步偏好、首页状态驱动主动作或官网法律内容。
+- 结论与下一项：1.0 当前结论为 **不可封版（BLOCKED）**。先把 `experience_static_check.ps1` 两处修复纳入确定的生产候选并重新跑原始生产分支 gate，再固定生产 commit、后端版本与 Archive/Build；随后按 `RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md` 和 `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 完成 Mac/Xcode、真机、StoreKit、权限/无障碍、性能和 App Store Connect 证据，所有阻塞项具备真实证据后才能转 `VERIFIED`。
+
+### 198. RELEASE-02：IAP 订阅支付真机成功路径增量证据（2026-09-22）
+
+- 用户反馈：用户明确表示“**IAP 订阅支付我真机测过了，没问题**”。本节把该反馈记录为 `IAP-01`/`R-12` 的订阅购买成功路径用户真机证据，补充第 197 节的封版审计，不改变 `RELEASE-02` 的 `BLOCKED` 状态。
+- 范围与文件：本次只更新 `GLOBAL_PRODUCT_INTERACTION_OPTIMIZATION_LEDGER_2026-07-15.md`、`RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md` 和 `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 的证据记录；未修改 IAP/StoreKit 产品代码、后端、配置、生产分支或用户数据。
+- 验证证据：唯一新增产品证据是用户对实际真机订阅支付成功路径的直接反馈；本轮文档更新后执行 `git diff --check` 通过。未提供 Build、设备/iOS、订阅周期、Sandbox/Production 环境、后端版本、录屏或日志，因此只记录成功子路径，不把整组 StoreKit 或生产验单标为通过。
+- 已确认与未确认：订阅支付成功路径记为“用户真机确认通过”。取消、待处理、失败、快速重复点击、恢复/无权益、过期、撤销、跨账号、错环境、Production 真实购买/恢复及服务端 JWS 验签仍待有明确 Build 和设备记录的候选包验证；IAP-02 继续保持未完成。
+- 差异与状态：追加记录前保留既有工作区 dirty 修改和未跟踪资料；本节不提交、推送、部署或同步生产。下一步仍按第 197 节顺序先将静态脚本修复纳入确定的生产候选并重跑原始生产 gate，再固定 Archive/Build、后端版本和 StoreKit/权限/无障碍/性能等剩余证据；全部阻塞项满足真实证据后才可转 `VERIFIED`。
+
+### 199. RELEASE-02：生产 Release 编译包的 Sandbox 边界更正（2026-09-22）
+
+- 用户澄清：当前所谓“生产包”是尚未上架的生产 Release 编译包，Apple IAP 仍处于 Sandbox；该包上的 Sandbox 订阅支付已在真机测通。正式发布前不存在可供验收的 Production 交易，因此不能要求本轮完成 Production 真实验单。
+- 记录修正：`IAP-01`/`R-12` 成功子路径明确记为“生产 Release 编译包 + Sandbox 订阅支付通过”；`IAP-02` 的 Production 真实购买、恢复和线上验单改为“发布后验证（当前未发布，不适用）”，不再把它描述成当前候选的失败或缺失测试。
+- 范围与文件：更新 `RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本台账的边界说明；未修改 IAP/StoreKit 代码、环境配置、后端、生产分支或用户数据。
+- 验证证据与剩余风险：用户提供了生产 Release 编译包的 Sandbox 真机成功反馈；本轮文档更新后执行 `git diff --check` 通过。取消、待处理、失败、重复点击、恢复/无权益、过期、撤销、跨账号等 Sandbox 反向路径仍需补验；Production 路由、JWS 和真实验单保留为正式发布后的首次交易验收，不计为当前未发布包的前置阻塞。
+- 下一项：继续处理 RELEASE-02 的生产候选同步、Archive/XCTest、权限/无障碍、性能和其他真机证据；正式上线并产生第一笔 Production 交易后，再单独记录 Production 验单结果。整体封版状态仍为 `BLOCKED`，但不因当前无法产生 Production 交易而扩大本轮范围。
+
+### 200. RELEASE-02：Sandbox 订阅取消路径真机增量证据（2026-09-22）
+
+- 用户补充：同一生产 Release 编译包的 Apple Sandbox 账号已在真机完成订阅支付和取消订阅，结果正常。
+- 记录修正：`IAP-01`/`R-12` 现确认 Sandbox 的购买成功与取消订阅两条子路径；待处理、失败、快速重复点击、恢复/无权益、过期、撤销、跨账号和错环境仍未由本次反馈覆盖。
+- 边界：当前包尚未上架，Production 真实交易、生产 JWS 验签和线上验单仍属于正式发布后的运营验收，不作为本轮未上架包的可执行前置项。
+- 验证与状态：本轮文档更新后执行 `git diff --check` 通过；未修改 IAP/StoreKit 代码、后端、配置或生产分支。`RELEASE-02` 总体继续 `BLOCKED`，剩余阻塞来自其他 Xcode/Archive/XCTest、真机、权限/无障碍和性能证据。
+
+### 201. RELEASE-02：Sandbox 订阅恢复路径真机增量证据（2026-09-22）
+
+- 用户补充：同一生产 Release 编译包的 Apple Sandbox 账号已在真机完成订阅支付、取消订阅和恢复订阅，结果正常。
+- 记录修正：`IAP-01`/`R-12` 现确认 Sandbox 的购买成功、取消和恢复三条子路径；待处理、失败、快速重复点击、无权益、过期、撤销、跨账号和错环境仍未由本次反馈覆盖。
+- 边界：当前包尚未上架，Production 真实交易、生产 JWS 验签和线上验单仍属于正式发布后的运营验收，不作为本轮未上架包的可执行前置项。
+- 验证与状态：本轮文档更新后执行 `git diff --check` 通过；未修改 IAP/StoreKit 代码、后端、配置或生产分支。`RELEASE-02` 总体继续 `BLOCKED`，其余阻塞范围不变。
+
+### 202. RELEASE-02：Xcode Cloud 编译通过的外部证据补充（2026-09-22）
+
+- 用户补充：当前版本已在 Xcode Cloud 编译通过。该信息修正第 197 节“本机没有 Xcode/Swift、因此没有任何编译证据”的范围：Windows 本机仍未执行本地 `xcodebuild`，但已有用户确认的外部 Xcode Cloud 编译成功证据。
+- 证据边界：用户未提供 Xcode Cloud workflow 名称、commit、Build、Debug/Release 配置、Archive 导出包、签名/版本信息或 XCTest 日志。因此只记录“Xcode Cloud 编译通过”，不把 Debug/Release 两套配置、Archive、完整 XCTest、device-audit 或 Instruments 自动标为通过。
+- 文件与范围：更新 `RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本台账的验收证据说明；未修改产品代码、IAP/StoreKit、后端、配置、生产分支或用户数据。
+- 状态与剩余风险：编译阶段证据缺口缩小，但 Archive 产物/Build 10 核对、完整 XCTest、设备容器审计、真机权限/无障碍和 100/1,000/5,000 条 Instruments 仍待明确证据。`RELEASE-02` 总体继续 `BLOCKED`；本轮文档更新后 `git diff --check` 通过。
+
+### 203. RELEASE-02：Xcode Cloud Swift 编译错误修复与 Windows 门禁复核（2026-09-22）
+
+- 用户反馈：Xcode Cloud 的 `NativeDemoAppTests` 编译出现 Swift 类型检查超时、key path 推断失败、主 actor 隔离调用、枚举成员推断、`Any` 数值转换和测试 helper 缺失等错误；`RecordView.swift` 还出现 Combine 类型未显式导入的警告。
+- 修复范围：
+  - `NativeDemoAppTests/StateRegressionTests.swift`：为 WeatherKit 与首页故事线测试补充 `@MainActor`；拆分过长的 `map`/集合表达式；为 `HomeItem.Category.dining`/`.shopping`、`TimeInterval` 数值和 `journeyRows()` helper 补充显式类型/作用域；将 key path 集合映射改为显式闭包。
+  - `NativeDemoApp/Views/RecordView.swift`：显式导入 `Combine`，消除 `Autoconnect`/`Publishers` 的非 implementation-only 导入警告。
+- 自动验证：`git diff --check` 通过；`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 退出码 0，末尾为 `release_repository_gate: OK`。夹具、真实照片、IAP 环境模板、staging 分支配置、语义/输入回归、静态检查、backend AI proxy、copy lint 和仓库接线断言均通过；copy lint 保留既有 7 条 soft warning。
+- 外部验证边界：本轮未在 Windows 冒充 macOS/Xcode XCTest 通过。需要用包含这些修复的同一 commit 重新运行 Xcode Cloud `Test action`，确认 `NativeDemoAppTests` 的实际通过/失败数量以及是否仍有 Swift 编译错误；用户此前确认的 Xcode Cloud 编译成功不能替代 Test action、Archive、device-audit、Instruments 或真机矩阵证据。
+- 状态与剩余风险：`RELEASE-02` 继续为 `BLOCKED`。当前阻塞不再是已反馈的 Swift 编译错误，而是完整 XCTest、Debug/Release Archive/Build 10、设备容器 audit、权限/无障碍、性能 Instruments 和其他封版真机证据尚未闭环。未提交、未推送、未部署，生产分支与 IAP/StoreKit 行为未改。

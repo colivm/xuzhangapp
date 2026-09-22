@@ -873,6 +873,7 @@ final class CommittedRecordNoteFieldTests: XCTestCase {
 
 #if canImport(WeatherKit)
 final class WeatherKitConditionBridgeTests: XCTestCase {
+    @MainActor
     func testPrecipitationConditionsKeepExistingRainAndSnowGroups() {
         XCTAssertEqual(WeatherCompanionService.legacyWeatherCode(for: .rain), 61)
         XCTAssertEqual(WeatherCompanionService.legacyWeatherCode(for: .freezingRain), 61)
@@ -4365,6 +4366,7 @@ final class SingleRecordEmotionBoundaryTests: XCTestCase {
         XCTAssertEqual(breakfast.displayEmotionTag, "周末早餐")
     }
 
+    @MainActor
     func testFirstRecordStoryUsesTimeAndRecordInsteadOfEmotionTemplate() {
         let parking = HomeItem(title: "停车费", amount: 69.8, category: .transport, createdAt: date(7, 47))
         let line = HomeViewModel.singleRecordTodayStoryLine(for: parking, calendar: calendar)
@@ -6048,12 +6050,15 @@ final class RecordInputAssistanceSnapshotTests: XCTestCase {
                 userEditedTitle: true
             )
         }
-        let supporting = repeated + (0..<3).map { index in
-            HomeItem(
-                title: "日常记录 \(index)",
-                amount: Double(20 + index),
-                category: .other,
-                createdAt: referenceDate.addingTimeInterval(TimeInterval(-(index + 1) * 7_200))
+        var supporting: [HomeItem] = repeated
+        for index in 0..<3 {
+            supporting.append(
+                HomeItem(
+                    title: "日常记录 \(index)",
+                    amount: Double(20 + index),
+                    category: .other,
+                    createdAt: referenceDate.addingTimeInterval(-Double(index + 1) * 7_200)
+                )
             )
         }
         let historyKey = RecordInputAssistanceComputation.historyKey(
@@ -6093,7 +6098,7 @@ final class RecordInputAssistanceSnapshotTests: XCTestCase {
         XCTAssertEqual(history.frequentSuggestions.first?.amount, 9.9)
         XCTAssertEqual(snapshot.result?.title, "瑞幸咖啡")
         XCTAssertTrue(["frequent", "habit", "scene_habit"].contains(snapshot.result?.source ?? ""))
-        XCTAssertEqual(snapshot.appliedCategory, .dining)
+        XCTAssertEqual(snapshot.appliedCategory, HomeItem.Category.dining)
     }
 
     func testPreviewLifeMarkSnapshotIsDeterministicForTheSameDraftAndLedgerRevision() {
@@ -6562,7 +6567,7 @@ final class RecordRecommendationConsistencyTests: XCTestCase {
         let title = "买到常用的小东西"
         let context = RecordGeneratedNoteContext(title: title, category: .shopping)
         let date = referenceDate
-        for offset in [0.0, 6 * 3_600] {
+        for offset in [TimeInterval(0), TimeInterval(6 * 3_600)] {
             let currentDate = date.addingTimeInterval(offset)
             let historyKey = RecordInputAssistanceComputation.historyKey(
                 ledgerRevision: offset == 0 ? 153 : 154,
@@ -6600,7 +6605,7 @@ final class RecordRecommendationConsistencyTests: XCTestCase {
                     generatedNoteContext: context
                 )
             )
-            XCTAssertEqual(resolution.category, .shopping)
+            XCTAssertEqual(resolution.category, HomeItem.Category.shopping)
             XCTAssertEqual(resolution.title, title)
             XCTAssertTrue(resolution.trace.contains("category:generatedDraft"))
             XCTAssertFalse(resolution.trace.contains("category:userLocked"))
@@ -7394,12 +7399,14 @@ final class HomeDashboardSnapshotTests: XCTestCase {
                 userEditedTitle: true
             )
         }
-        items += (1...4).map { index in
-            HomeItem(
-                title: "日常记录 \(index)",
-                amount: Double(10 + index),
-                category: .other,
-                createdAt: now.addingTimeInterval(TimeInterval(-index * 24 * 60 * 60))
+        for index in 1...4 {
+            items.append(
+                HomeItem(
+                    title: "日常记录 \(index)",
+                    amount: Double(10 + index),
+                    category: .other,
+                    createdAt: now.addingTimeInterval(-Double(index) * 24 * 60 * 60)
+                )
             )
         }
 
@@ -7440,12 +7447,14 @@ final class HomeDashboardSnapshotTests: XCTestCase {
                 userEditedTitle: true
             )
         }
-        history += (1...4).map { index in
-            HomeItem(
-                title: "普通记录 \(index)",
-                amount: Double(20 + index),
-                category: .other,
-                createdAt: now.addingTimeInterval(TimeInterval(-index * 24 * 60 * 60))
+        for index in 1...4 {
+            history.append(
+                HomeItem(
+                    title: "普通记录 \(index)",
+                    amount: Double(20 + index),
+                    category: .other,
+                    createdAt: now.addingTimeInterval(-Double(index) * 24 * 60 * 60)
+                )
             )
         }
 
@@ -12577,6 +12586,35 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
         )
     }
 
+    private func journeyRows() -> [HomeItem] {
+        let specs: [(String, HomeItem.Category, Int, Int, String, String)] = [
+            ("南京电车充电", .transport, 20, 8, "南京", "本城"),
+            ("到宿迁的过路费", .transport, 20, 11, "宿迁", "外地"),
+            ("宿迁电车充电", .transport, 21, 9, "宿迁", "外地"),
+            ("到连云港的过路费", .transport, 22, 11, "连云港", "外地"),
+            ("连云港吃海鲜", .dining, 22, 13, "连云港", "外地"),
+            ("徐记花甲鸡爪｜宿豫店", .dining, 22, 22, "宿迁", "外地"),
+            ("周日返南京过路费", .transport, 23, 17, "南京", "本城")
+        ]
+        return specs.enumerated().map { index, row in
+            HomeItem(
+                id: UUID(uuidString: String(format: "E1000000-0000-0000-0000-%012d", 1_001 + index))!,
+                title: row.0,
+                amount: 28,
+                category: row.1,
+                createdAt: calendar.date(from: DateComponents(
+                    year: 2026, month: 8, day: row.2, hour: row.3
+                ))!,
+                memoryContext: HomeItem.MemoryContext(
+                    weatherKind: nil,
+                    temperatureCelsius: nil,
+                    cityName: row.4,
+                    semanticPlace: row.5
+                )
+            )
+        }
+    }
+
     func testEmptyDiscoverSnapshotDoesNotInventCards() {
         let snapshot = TraceSnapshotComputation.buildDiscoverSnapshot(
             items: [],
@@ -13158,7 +13196,7 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
         let all = LifeJourneyFactService.allFacts(in: rows, calendar: calendar)
         XCTAssertFalse(all.isEmpty)
         XCTAssertEqual(all.first, LifeJourneyFactService.primaryFact(in: rows, calendar: calendar))
-        XCTAssertEqual(Set(all.map(\.id)).count, all.count)
+        XCTAssertEqual(Set(all.map { $0.id }).count, all.count)
     }
 
     func testDiscoverEchoNeedsCurrentAndHistoricalEvidenceOutsideTheJourney() {
