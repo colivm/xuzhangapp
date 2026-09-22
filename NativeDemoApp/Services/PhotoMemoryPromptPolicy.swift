@@ -268,11 +268,12 @@ enum PhotoMemoryPromptPolicy {
     static func resolvedAnchorRole(for item: HomeItem) -> ResolvedPhotoMemoryAnchorRole {
         let inferred = anchorReason(for: item)
         if let storedRole = item.memoryAnchorRole,
-           let storedSceneHint = item.memoryAnchorSceneHint,
            !isAutomaticallyAssignedAnchor(item) {
             return ResolvedPhotoMemoryAnchorRole(
                 role: storedRole,
-                sceneHint: storedSceneHint,
+                // Older explicit photo metadata persisted the role before the
+                // scene hint field existed. Keep that user choice qualified.
+                sceneHint: item.memoryAnchorSceneHint ?? legacySceneHint(for: storedRole),
                 isQualified: true
             )
         }
@@ -288,6 +289,16 @@ enum PhotoMemoryPromptPolicy {
             sceneHint: .experience,
             isQualified: false
         )
+    }
+
+    private static func legacySceneHint(for role: PhotoMemoryAssetRole) -> PhotoMemorySceneHint {
+        switch role {
+        case .moment: return .experience
+        case .receipt: return .experience
+        case .place: return .travel
+        case .object: return .importantPurchase
+        case .careRecord: return .careRecord
+        }
     }
 
     static func refreshedAutomaticAnchorMetadata(

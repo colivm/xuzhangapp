@@ -6142,3 +6142,11 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 修改文件：`NativeDemoAppTests/StateRegressionTests.swift` 与本台账。未修改产品代码、IAP/StoreKit、生产分支或未跟踪资料。
 - 验证边界：Windows 可运行 `git diff --check` 和发布门禁；本机无 Swift/Xcode，不能冒充 XCTest 编译通过。修复提交后必须用同一 commit 重新运行 Xcode Cloud Test action，继续检查是否还有真实编译或测试失败。
 - 状态：`CODE_DONE`；`RELEASE-02` 继续 `BLOCKED`，等待 Xcode Cloud XCTest、Archive、device-audit、Instruments 和封版真机证据。
+
+### 210. RELEASE-02：识别重复测试失败并恢复旧版显式照片角色兼容（2026-09-22）
+
+- 用户再次反馈 `LifeNarrativeSignalPolicyTests` 等失败。当前日志已是 XCTest 运行期断言，不是上一轮 `try` 编译错误；共 89 条断言，主要集中在照片 lead、Trace rewrite、LifeMark、Discover 和共享语义单例。
+- 根因一：旧版显式照片数据可能只有 `memoryAnchorRole` 没有 `memoryAnchorSceneHint`。`resolvedAnchorRole` 将其误判为未确认照片，导致合约要求的 `photo:` lead、Trace primary anchor 和 rewrite evidence 全部降级。现在对非自动 caption 的旧角色按角色补默认 scene hint，保留用户已有选择；自动分配照片仍必须满足完整元数据规则。
+- 根因二：Xcode Cloud Test action 仍以 8 个 worker 执行时，`LifeNarrativeAIRewriteStore` 等共享测试单例会被其他套件清空或覆盖，造成同一测试中显式 publish 后读取为 `nil`。共享 Scheme 已标记 `parallelizable = NO`，但必须在 Xcode Cloud workflow 的 Test action 将并行 worker 设为 1/关闭 parallel testing 后复跑，不能把这类污染当成产品断言逐条修改。
+- 修改文件：`NativeDemoApp/Services/PhotoMemoryPromptPolicy.swift` 与本台账。未修改 IAP/StoreKit、生产分支或未跟踪资料。
+- 状态：`CODE_DONE`；Windows 仍只能做静态门禁，需用包含本修复的提交在 Xcode Cloud 串行 Test action 复跑，确认真实剩余失败，再处理独立逻辑问题。`RELEASE-02` 继续 `BLOCKED`。
