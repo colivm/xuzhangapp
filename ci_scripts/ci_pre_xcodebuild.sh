@@ -9,29 +9,32 @@ if [ -z "$BUILD_NUMBER" ]; then
   exit 0
 fi
 
-if [ -n "${CI_PRIMARY_REPOSITORY_PATH:-}" ]; then
-  REPOSITORY_PATH="$CI_PRIMARY_REPOSITORY_PATH"
-elif [ -f "$(pwd)/NativeDemoApp/Info.plist" ]; then
-  REPOSITORY_PATH="$(pwd)"
-elif [ -f "$SCRIPT_DIR/../NativeDemoApp/Info.plist" ]; then
-  REPOSITORY_PATH="$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)"
-elif [ -f "$SCRIPT_DIR/NativeDemoApp/Info.plist" ]; then
-  REPOSITORY_PATH="$SCRIPT_DIR"
-else
-  echo "Unable to locate repository root containing NativeDemoApp/Info.plist" >&2
+PLIST_PATH=""
+for CANDIDATE_ROOT in \
+  "${CI_PRIMARY_REPOSITORY_PATH:-}" \
+  "$(pwd)" \
+  "$SCRIPT_DIR/.." \
+  "$SCRIPT_DIR"; do
+  if [ -n "$CANDIDATE_ROOT" ] && [ -f "$CANDIDATE_ROOT/NativeDemoApp/Info.plist" ]; then
+    PLIST_PATH="$CANDIDATE_ROOT/NativeDemoApp/Info.plist"
+    break
+  fi
+done
+
+if [ -z "$PLIST_PATH" ]; then
+  SEARCH_ROOT="${CI_PRIMARY_REPOSITORY_PATH:-$SCRIPT_DIR/..}"
+  PLIST_PATH="$(find "$SEARCH_ROOT" -path '*/NativeDemoApp/Info.plist' -type f -print -quit 2>/dev/null || true)"
+fi
+
+if [ -z "$PLIST_PATH" ]; then
+  echo "Warning: NativeDemoApp/Info.plist was not found; keeping the committed build number." >&2
   echo "CI_PRIMARY_REPOSITORY_PATH=${CI_PRIMARY_REPOSITORY_PATH:-<unset>}" >&2
   echo "Script directory=$SCRIPT_DIR" >&2
   echo "Working directory=$(pwd)" >&2
-  exit 1
+  exit 0
 fi
 
-PLIST_PATH="$REPOSITORY_PATH/NativeDemoApp/Info.plist"
 echo "Using Info.plist at $PLIST_PATH"
-
-if [ ! -f "$PLIST_PATH" ]; then
-  echo "Info.plist disappeared before update: $PLIST_PATH" >&2
-  exit 1
-fi
 
 if [ -x /usr/libexec/PlistBuddy ]; then
   if ! /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$PLIST_PATH"; then

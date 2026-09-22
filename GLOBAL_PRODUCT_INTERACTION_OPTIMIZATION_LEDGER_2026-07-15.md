@@ -6112,3 +6112,10 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 修复范围：脚本现在按 `CI_PRIMARY_REPOSITORY_PATH`、当前目录、脚本上级目录和脚本目录依次探测 `NativeDemoApp/Info.plist`；写入优先使用 `/usr/libexec/PlistBuddy`，失败或不可用时回退 `/usr/bin/plutil`，最后用 `plutil` 回读校验 `CFBundleVersion`。
 - 本地验证边界：`git diff --check` 和 Windows 发布门禁可执行；Windows 无 macOS 的 `PlistBuddy`/`plutil`，不冒充脚本运行成功。Xcode Cloud 重新运行后应先看到 `Using Info.plist at ...`，再看到 `Set CFBundleVersion to ...`；若失败，日志会指出根目录探测、写入或回读阶段。
 - 状态：`RELEASE-02` 继续 `BLOCKED`。生产分支、IAP/StoreKit 行为和未跟踪资料未改；待脚本通过后继续验证 Test action、Archive 与完整 XCTest。
+
+### 206. RELEASE-02：pre-xcodebuild 脚本不再因辅助版本文件阻塞 workflow（2026-09-22）
+
+- 用户反馈：重新运行后仍报告 `ci_pre_xcodebuild.sh` 退出码 1；此前截图对应旧日志格式，远端最新提交已确认存在，但 workflow 的实际 commit/分支仍需在 Xcode Cloud 页面核对。
+- 修复范围：脚本现在校验多个仓库候选根目录，并用 `find` 兜底定位 `NativeDemoApp/Info.plist`。若仓库确实没有该辅助文件，记录 warning、保留提交中的构建号并正常退出，让后续 `xcodebuild` 阶段报告实际工程错误，不再由版本号辅助脚本提前阻断整个 workflow。
+- 验证边界：本地 `git diff --check` 与 Windows 发布门禁仍需复跑；Windows 无 macOS `PlistBuddy`/`plutil`，不冒充 Xcode Cloud 执行结果。
+- 状态：`RELEASE-02` 继续 `BLOCKED`。重新运行时必须确认 workflow 使用 `5d05c16` 之后的 commit；日志应出现新格式的 `Using Info.plist at ...`、`Set CFBundleVersion ...`，或明确的 warning，而不应再出现旧的 `Info.plist not found at ...`。
