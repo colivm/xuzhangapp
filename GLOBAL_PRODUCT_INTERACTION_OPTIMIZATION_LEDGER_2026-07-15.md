@@ -6126,3 +6126,11 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 根因：该测试所有输入都使用 `photoCount: 2`，而 `scrapbook` 至少需要 3 张照片、`memoryWall` 至少需要 4 张；测试同时要验证场景阈值，导致照片结构门禁先把目标模板过滤掉。
 - 修复：仅将该测试的 5 组选择输入统一提高到 `photoCount: 7`，覆盖模板目录支持的最大照片数，不改变模板目录、自动解锁规则、手动选择规则或产品行为。
 - 验证边界：Windows 门禁和 `git diff --check` 需在本轮修复后执行；完整 XCTest 需用 Xcode Cloud 重新运行确认。`RELEASE-02` 继续 `BLOCKED`，生产分支和未跟踪资料未改。
+
+### 208. RELEASE-02：Xcode Cloud XCTest 失败收口与测试资源接线（2026-09-22）
+
+- 用户反馈：`CoverAIDirectorTests` 多个用例无法解包候选模板，`ReleaseScaleFixtureTests` 找不到 `/Volumes/workspace/repository/qa/release_fixtures/manifest.json`，并同时出现大量跨套件失败；Xcode Cloud Test action 使用 8 个并行测试 worker。
+- 根因与修复：`LegacyWeeklyCoverAdapter` 将仅供本地自动选择的场景数量门槛错误复用于 AI 候选，改为向 AI 提供结构合法的 `manuallyAvailableTemplateIDs`；共享 Scheme 将测试 target 设为串行，避免全局缓存、UserDefaults 和单例状态在并行套件间污染；`ReleaseScaleFixtureTests` 支持仓库路径与测试 bundle 两种夹具加载方式，并将 `qa/release_fixtures` 接入 `NativeDemoAppTests` Resources。
+- 修改文件：`NativeDemoApp/CoverEngine/Flow/LegacyWeeklyCoverAdapter.swift`、`NativeDemoApp.xcodeproj/xcshareddata/xcschemes/NativeDemoApp.xcscheme`、`NativeDemoApp.xcodeproj/project.pbxproj`、`NativeDemoAppTests/StateRegressionTests.swift`，以及本台账。未纳入未跟踪资料，未修改生产分支、IAP/StoreKit、后端或用户数据。
+- 验证证据：本轮需执行 `git diff --check` 与 `python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging`；Windows 无 Swift/Xcode，不能把本地结果描述为 XCTest 通过。Xcode Cloud 必须用包含本节改动的同一提交重新执行 Test action，确认候选模板、夹具加载和跨套件失败是否消失。
+- 当前状态：`CODE_DONE`（源码与 Windows 门禁完成，外部 XCTest 尚未复跑）。`RELEASE-02` 总体继续 `BLOCKED`；剩余风险为 Xcode Cloud Test action、Debug/Release Archive、device-audit、Instruments 和封版真机证据尚未闭环。下一步先复跑 Xcode Cloud Test action，再根据新日志处理仍然存在的独立失败，不逐条猜测旧并行污染下的断言。

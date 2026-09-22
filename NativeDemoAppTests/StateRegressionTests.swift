@@ -11554,13 +11554,27 @@ final class ReleaseScaleFixtureTests: XCTestCase {
     }
 
     private func loadManifest() throws -> Manifest {
-        let url = repositoryRoot.appendingPathComponent("qa/release_fixtures/manifest.json")
+        let url = fixtureURL(named: "manifest.json")
         return try JSONDecoder().decode(Manifest.self, from: Data(contentsOf: url))
     }
 
     private func loadFixture(file: String) throws -> [HomeItem] {
-        let url = repositoryRoot.appendingPathComponent("qa/release_fixtures/\(file)")
+        let url = fixtureURL(named: file)
         return try JSONDecoder().decode([HomeItem].self, from: Data(contentsOf: url))
+    }
+
+    private func fixtureURL(named file: String) throws -> URL {
+        let repositoryURL = repositoryRoot.appendingPathComponent("qa/release_fixtures/\(file)")
+        if FileManager.default.fileExists(atPath: repositoryURL.path) {
+            return repositoryURL
+        }
+        if let bundleURL = Bundle(for: ReleaseScaleFixtureTests.self)
+            .url(forResource: file.replacingOccurrences(of: ".json", with: ""),
+                 withExtension: "json",
+                 subdirectory: "release_fixtures") {
+            return bundleURL
+        }
+        throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: repositoryURL.path])
     }
 
     private func minorUnitTotal(_ items: [HomeItem]) -> Int {

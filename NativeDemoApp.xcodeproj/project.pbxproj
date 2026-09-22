@@ -20,6 +20,7 @@
 		A100000B0000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A100001B0000000000000001 /* Assets.xcassets */; };
 		A100000B1000000000000001 /* RecordSceneLexicon.json in Resources */ = {isa = PBXBuildFile; fileRef = A100001B1000000000000001 /* RecordSceneLexicon.json */; };
 		A100000B2000000000000001 /* RecordSceneLexicon.regression.json in Resources */ = {isa = PBXBuildFile; fileRef = A100001B2000000000000001 /* RecordSceneLexicon.regression.json */; };
+		R10000010000000000000001 /* release_fixtures in Resources */ = {isa = PBXBuildFile; fileRef = R10000020000000000000001 /* release_fixtures */; };
 		A100000C0000000000000001 /* OCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100001E0000000000000001 /* OCRService.swift */; };
 		A100000D0000000000000001 /* AIReportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100001F0000000000000001 /* AIReportService.swift */; };
 		A100000E0000000000000001 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000210000000000000001 /* KeychainService.swift */; };
@@ -232,6 +233,7 @@
 		U10000110000000000000001 /* InteractionStateModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractionStateModels.swift; sourceTree = "<group>"; };
 		U10000120000000000000001 /* StateRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateRegressionTests.swift; sourceTree = "<group>"; };
 		U10000130000000000000001 /* NativeDemoAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NativeDemoAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		R10000020000000000000001 /* release_fixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; path = qa/release_fixtures; sourceTree = SOURCE_ROOT; };
 		U20000110000000000000001 /* LedgerMigrationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerMigrationModels.swift; sourceTree = "<group>"; };
 		U30000110000000000000001 /* LedgerImageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerImageStore.swift; sourceTree = "<group>"; };
 		U30000120000000000000001 /* LedgerImageStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerImageStoreTests.swift; sourceTree = "<group>"; };
@@ -525,6 +527,7 @@
 		U10000200000000000000001 /* NativeDemoAppTests */ = {
 			isa = PBXGroup;
 			children = (
+				R10000020000000000000001 /* release_fixtures */,
 				U10000120000000000000001 /* StateRegressionTests.swift */,
 				C0A000060000000000000001 /* CoverContractEngineTests.swift */,
 				C0A000120000000000000001 /* CoverShareFlowTests.swift */,
@@ -638,6 +641,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				R10000010000000000000001 /* release_fixtures in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
