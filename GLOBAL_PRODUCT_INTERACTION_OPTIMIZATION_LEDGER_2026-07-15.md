@@ -6097,4 +6097,4 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
   - `NativeDemoApp/Views/RecordView.swift`：显式导入 `Combine`，消除 `Autoconnect`/`Publishers` 的非 implementation-only 导入警告。
 - 自动验证：`git diff --check` 通过；`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 退出码 0，末尾为 `release_repository_gate: OK`。夹具、真实照片、IAP 环境模板、staging 分支配置、语义/输入回归、静态检查、backend AI proxy、copy lint 和仓库接线断言均通过；copy lint 保留既有 7 条 soft warning。
 - 外部验证边界：本轮未在 Windows 冒充 macOS/Xcode XCTest 通过。需要用包含这些修复的同一 commit 重新运行 Xcode Cloud `Test action`，确认 `NativeDemoAppTests` 的实际通过/失败数量以及是否仍有 Swift 编译错误；用户此前确认的 Xcode Cloud 编译成功不能替代 Test action、Archive、device-audit、Instruments 或真机矩阵证据。
-- 状态与剩余风险：`RELEASE-02` 继续为 `BLOCKED`。当前阻塞不再是已反馈的 Swift 编译错误，而是完整 XCTest、Debug/Release Archive/Build 10、设备容器 audit、权限/无障碍、性能 Instruments 和其他封版真机证据尚未闭环。未提交、未推送、未部署，生产分支与 IAP/StoreKit 行为未改。
+- 状态与剩余风险：`RELEASE-02` 继续为 `BLOCKED`。当前阻塞不再是已反馈的 Swift 编译错误，而是完整 XCTest、Debug/Release Archive/Build 10、设备容器 audit、权限/无障碍、性能 Instruments 和其他封版真机证据尚未闭环。修复已提交为 `f3245141afbdece3e8793ad7e688a63006cb01df` 并推送到 `origin/feature/xuzhangapp-staging`；未部署，生产分支与 IAP/StoreKit 行为未改。
