@@ -11554,12 +11554,12 @@ final class ReleaseScaleFixtureTests: XCTestCase {
     }
 
     private func loadManifest() throws -> Manifest {
-        let url = fixtureURL(named: "manifest.json")
+        let url = try fixtureURL(named: "manifest.json")
         return try JSONDecoder().decode(Manifest.self, from: Data(contentsOf: url))
     }
 
     private func loadFixture(file: String) throws -> [HomeItem] {
-        let url = fixtureURL(named: file)
+        let url = try fixtureURL(named: file)
         return try JSONDecoder().decode([HomeItem].self, from: Data(contentsOf: url))
     }
 

@@ -6134,3 +6134,11 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 修改文件：`NativeDemoApp/CoverEngine/Flow/LegacyWeeklyCoverAdapter.swift`、`NativeDemoApp.xcodeproj/xcshareddata/xcschemes/NativeDemoApp.xcscheme`、`NativeDemoApp.xcodeproj/project.pbxproj`、`NativeDemoAppTests/StateRegressionTests.swift`，以及本台账。未纳入未跟踪资料，未修改生产分支、IAP/StoreKit、后端或用户数据。
 - 验证证据：本轮需执行 `git diff --check` 与 `python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging`；Windows 无 Swift/Xcode，不能把本地结果描述为 XCTest 通过。Xcode Cloud 必须用包含本节改动的同一提交重新执行 Test action，确认候选模板、夹具加载和跨套件失败是否消失。
 - 当前状态：`CODE_DONE`（源码与 Windows 门禁完成，外部 XCTest 尚未复跑）。`RELEASE-02` 总体继续 `BLOCKED`；剩余风险为 Xcode Cloud Test action、Debug/Release Archive、device-audit、Instruments 和封版真机证据尚未闭环。下一步先复跑 Xcode Cloud Test action，再根据新日志处理仍然存在的独立失败，不逐条猜测旧并行污染下的断言。
+
+### 209. RELEASE-02：修正夹具加载 helper 的可抛出调用（2026-09-22）
+
+- Xcode Cloud 编译反馈：`StateRegressionTests.swift:11557` 和 `11562` 报 `Call can throw but is not marked with 'try'`。
+- 根因：上一节新增的 `fixtureURL(named:) throws` 已由 `loadManifest()`/`loadFixture(file:)` 透传错误，但两个 helper 内部漏写 `try`；测试方法本身已有 `try loadManifest()` 与 `try loadFixture(...)`，因此只需修正这两个调用点。
+- 修改文件：`NativeDemoAppTests/StateRegressionTests.swift` 与本台账。未修改产品代码、IAP/StoreKit、生产分支或未跟踪资料。
+- 验证边界：Windows 可运行 `git diff --check` 和发布门禁；本机无 Swift/Xcode，不能冒充 XCTest 编译通过。修复提交后必须用同一 commit 重新运行 Xcode Cloud Test action，继续检查是否还有真实编译或测试失败。
+- 状态：`CODE_DONE`；`RELEASE-02` 继续 `BLOCKED`，等待 Xcode Cloud XCTest、Archive、device-audit、Instruments 和封版真机证据。
