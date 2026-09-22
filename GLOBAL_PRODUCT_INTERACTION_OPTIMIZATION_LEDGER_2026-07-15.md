@@ -6119,3 +6119,10 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 修复范围：脚本现在校验多个仓库候选根目录，并用 `find` 兜底定位 `NativeDemoApp/Info.plist`。若仓库确实没有该辅助文件，记录 warning、保留提交中的构建号并正常退出，让后续 `xcodebuild` 阶段报告实际工程错误，不再由版本号辅助脚本提前阻断整个 workflow。
 - 验证边界：本地 `git diff --check` 与 Windows 发布门禁仍需复跑；Windows 无 macOS `PlistBuddy`/`plutil`，不冒充 Xcode Cloud 执行结果。
 - 状态：`RELEASE-02` 继续 `BLOCKED`。重新运行时必须确认 workflow 使用 `5d05c16` 之后的 commit；日志应出现新格式的 `Using Info.plist at ...`、`Set CFBundleVersion ...`，或明确的 warning，而不应再出现旧的 `Info.plist not found at ...`。
+
+### 207. RELEASE-02：修复 LaunchCoverTemplateTests 场景解锁夹具的照片数量矛盾（2026-09-22）
+
+- Xcode Cloud `NativeDemoAppTests` 已进入测试执行，但 `LaunchCoverTemplateTests.testAutomaticTemplatesUnlockBySceneKindCountInsteadOfNamedScenes()` 有 4 个断言失败：`memoryWall`/`scrapbook` 的手动可用性与一/两种场景的自动解锁断言失败。
+- 根因：该测试所有输入都使用 `photoCount: 2`，而 `scrapbook` 至少需要 3 张照片、`memoryWall` 至少需要 4 张；测试同时要验证场景阈值，导致照片结构门禁先把目标模板过滤掉。
+- 修复：仅将该测试的 5 组选择输入统一提高到 `photoCount: 7`，覆盖模板目录支持的最大照片数，不改变模板目录、自动解锁规则、手动选择规则或产品行为。
+- 验证边界：Windows 门禁和 `git diff --check` 需在本轮修复后执行；完整 XCTest 需用 Xcode Cloud 重新运行确认。`RELEASE-02` 继续 `BLOCKED`，生产分支和未跟踪资料未改。
