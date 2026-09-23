@@ -12837,19 +12837,23 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
 
         XCTAssertTrue(card.isFeatured)
         XCTAssertEqual(card.evidenceSummary?.total, card.evidenceItemIDs.count)
-        XCTAssertEqual(card.evidenceSummary?.road, 2)
+        // 南京电车充电 is a refuelling node on the route itself, so it belongs to the
+        // road evidence: the trip is certified by the tolls, and the charge is part
+        // of driving them. Only the two tolls plus that charge are road, the two
+        // dining rows are away-from-home activity, and nothing is left over.
+        XCTAssertEqual(card.evidenceSummary?.road, 3)
         XCTAssertEqual(card.evidenceSummary?.activity, 2)
-        XCTAssertEqual(card.evidenceSummary?.other, 1)
-        XCTAssertEqual(card.coreEvidenceItemIDs?.count, 4)
-        XCTAssertEqual(card.boundaryEvidenceItemIDs?.count, 1)
+        XCTAssertEqual(card.evidenceSummary?.other, 0)
+        XCTAssertEqual(card.coreEvidenceItemIDs?.count, 5)
+        XCTAssertEqual(card.boundaryEvidenceItemIDs?.count, 0)
         XCTAssertEqual(
             Set((card.coreEvidenceItemIDs ?? []) + (card.boundaryEvidenceItemIDs ?? [])),
             Set(card.evidenceItemIDs)
         )
         XCTAssertTrue(card.evidenceDisplayText.contains("共 5 笔记录"))
-        XCTAssertTrue(card.evidenceDisplayText.contains("2 笔道路"))
+        XCTAssertTrue(card.evidenceDisplayText.contains("3 笔道路"))
         XCTAssertTrue(card.evidenceDisplayText.contains("2 笔异地活动"))
-        XCTAssertTrue(card.evidenceDisplayText.contains("1 笔路线边界记录"))
+        XCTAssertFalse(card.evidenceDisplayText.contains("路线边界记录"))
     }
 
     func testDiscoverDetailEvidenceResolutionDropsDeletedRecordsAndKeepsOrder() {
