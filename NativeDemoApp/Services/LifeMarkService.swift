@@ -266,7 +266,13 @@ enum LifeJourneyFactService {
         }
         let supportingRoadRows = segmentRows.filter { containsAny(factualText($0), supportingRoadKeywords) }
         let transitRows = segmentRows.filter { containsLongDistanceTransitEvidence(factualText($0)) }
-        let isRoadTrip = !tollRows.isEmpty || energyRows.count >= 2
+        // A charge mid-route is a top-up made *during* a drive, so on a
+        // cross-city route already certified by location a single one is
+        // enough. Two are required only when the cities could not establish
+        // a home, where a second top-up is the corroborating road evidence.
+        let hasCertifiedRoute = homeCity != nil && Set(route).count >= 2
+        let isRoadTrip = !tollRows.isEmpty
+            || energyRows.count >= (hasCertifiedRoute ? 1 : 2)
         guard isRoadTrip || !transitRows.isEmpty else { return nil }
 
         let activityRows = segmentRows.filter { item in
