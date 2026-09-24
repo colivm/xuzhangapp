@@ -11022,7 +11022,7 @@ final class PetCompanionMessagePolicyTests: XCTestCase {
             calendar: calendar
         )
 
-        XCTAssertEqual(messages.map(\.text), ["下午这趟通勤是在热天里记下的。"])
+        XCTAssertEqual(messages.map(\.text), ["下午这趟通勤是在热天里记下的。现在外面在下雨，如果还要出门，记得带伞，路上慢一点。"])
     }
 
     func testSystemWarmTagDoesNotBecomeAClaimAboutTheUser() {
