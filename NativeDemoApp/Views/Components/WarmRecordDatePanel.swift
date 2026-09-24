@@ -10,30 +10,46 @@ enum RecordTimeSelectionPolicy {
     ) -> Date {
         let normalizedHour = min(max(hour, 0), 23)
         let normalizedMinute = min(max(minute, 0), 59)
-        let startOfDay = calendar.startOfDay(for: source)
-        // .nextTime advances the hour past a DST gap while keeping the minute,
-        // which is the right behaviour when the requested time doesn't exist.
-        if let matched = calendar.date(
-            bySettingHour: normalizedHour,
-            minute: normalizedMinute,
-            second: 0,
-            of: startOfDay,
-            matchingPolicy: .nextTime,
-            repeatedTimePolicy: .first,
-            direction: .forward
-        ), calendar.isDate(matched, inSameDayAs: source) {
-            return matched
+        let day = calendar.dateComponents([.era, .year, .month, .day], from: source)
+
+        // Walk forward from the requested hour and keep the first candidate that
+        // survives a read-back check. A DST spring-forward makes some wall-clock
+        // times nonexistent (America/Los_Angeles on 2026-03-08 has no 02:xx), and
+        // `Calendar.date(from:)` silently normalises those by pushing the clock
+        // to the gap boundary — which drops the minute we were asked to keep.
+        // `matchingPolicy: .nextTime` has the same failure: it jumps to 03:00:00
+        // rather than 03:30:00, so the minute assertion still fails.
+        for candidateHour in normalizedHour...23 {
+            var components = day
+            components.hour = candidateHour
+            components.minute = normalizedMinute
+            components.second = 0
+            components.nanosecond = 0
+            guard let candidate = calendar.date(from: components) else { continue }
+            // `date(from:)` also rolls forward when the day itself is shorter
+            // than usual, so verify rather than trust the components we set.
+            guard calendar.isDate(candidate, inSameDayAs: source),
+                  calendar.component(.hour, from: candidate) == candidateHour,
+                  calendar.component(.minute, from: candidate) == normalizedMinute else {
+                continue
+            }
+            return candidate
         }
 
-        // Last-resort fallback: strip the date to its day components and
-        // rebuild. calendar.date(from:) normalises impossible times (e.g. a
-        // DST gap) by advancing the clock, which can silently drop the minute,
-        // but by this point we've already exhausted the preferred path above.
-        var components = calendar.dateComponents([.era, .year, .month, .day], from: source)
-        components.hour = normalizedHour
-        components.minute = normalizedMinute
-        components.second = 0
-        return calendar.date(from: components) ?? source
+        // No wall-clock time on this local day carries the requested hour and
+        // minute (a whole day can be skipped, as in the 2011 Samoa transition).
+        // Answer with the last representable instant of that same day so the
+        // caller still commits a date on the day the user picked.
+        var fallback = day
+        fallback.hour = 23
+        fallback.minute = 59
+        fallback.second = 59
+        fallback.nanosecond = 0
+        if let candidate = calendar.date(from: fallback),
+           calendar.isDate(candidate, inSameDayAs: source) {
+            return candidate
+        }
+        return source
     }
 }
 

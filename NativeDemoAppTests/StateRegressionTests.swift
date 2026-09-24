@@ -1439,8 +1439,15 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
     }
 
     func testQualifiedMomentPhotoCanBecomeAConcreteLead() {
+        // The title has to clear `EchoAnchorService.isEligibleLifeTraceTitle`
+        // on its own. This fixture is not user-edited, so the
+        // `RecordPrefillService.isHabitTitle` gate applies and rejects titles
+        // of 12 characters or fewer. A real handwritten restaurant note is
+        // long enough to pass, so keep this one at 13 characters rather than
+        // leaning on `userEdited` the way the sibling test does.
+        let momentTitle = "楼下那家红汤馄饨配一碟小菜"
         let moment = item(
-            "红汤馄饨",
+            momentTitle,
             category: .dining,
             day: 21,
             hasPhoto: true,
@@ -1458,7 +1465,7 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.leadSignalID, "photo:\(moment.id.uuidString)")
-        XCTAssertTrue(plan.headline.contains("红汤馄饨"))
+        XCTAssertTrue(plan.headline.contains(momentTitle))
         XCTAssertTrue(plan.headline.contains("还留着一张照片"))
         XCTAssertTrue(plan.summary.contains("只记下一笔"))
     }
