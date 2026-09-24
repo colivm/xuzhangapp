@@ -770,7 +770,7 @@ enum TraceSnapshotComputation {
         switch kind {
         case .cityRoute, .lodging, .social, .leisure, .fitness:
             kindBoost = 18
-        case .coffee, .breakfast, .quickMeal, .workMeal, .commute, .vehicleCare:
+        case .coffee, .breakfast, .quickMeal, .workMeal, .commute, .carDaily:
             kindBoost = 12
         default:
             kindBoost = 6

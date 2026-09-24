@@ -1029,8 +1029,7 @@ final class OCRDateEvidencePolicyTests: XCTestCase {
             calendar: calendar
         ))
         let labeledBare = try XCTUnwrap(OCRDateEvidencePolicy.firstDate(
-            in: "日期
-4.22 8:35",
+            in: "日期\n4.22 8:35",
             now: now,
             calendar: calendar
         ))

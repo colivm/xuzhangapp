@@ -1161,8 +1161,8 @@ final class PlaybackService {
             return "通勤"
         case .cityRoute:
             return "出行"
-        case .vehicleCare:
-            return "用车"
+        case .carDaily:
+            return "车主日常"
         case .convenienceSupply:
             return "小补给"
         case .groceries:
@@ -1237,7 +1237,7 @@ final class PlaybackService {
             return "🎁"
         case .leisure:
             return "🎮"
-        case .vehicleCare:
+        case .carDaily:
             return "🚗"
         case .errand, .general:
             return "📝"
@@ -1475,7 +1475,7 @@ final class PlaybackService {
                 return .lodging
             case .social:
                 return .social
-            case .leisure, .errand, .general, .vehicleCare:
+            case .leisure, .errand, .general, .carDaily:
                 break
             }
         }

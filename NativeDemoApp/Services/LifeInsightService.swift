@@ -814,7 +814,7 @@ final class LifeInsightService {
         case .lodging: return "停留住宿"
         case .social: return "见面人情"
         case .leisure: return "放松安排"
-        case .vehicleCare: return "用车"
+        case .carDaily: return "车主日常"
         case .errand: return "临时事务"
         case .general: return signal.category.label
         }
