@@ -84,9 +84,10 @@ enum IAPRestoreFailureCopy {
             guard accountMismatchCodes.contains(code) else { return genericMessage }
             if code == "TRANSACTION_ALREADY_BOUND" {
                 if tier == .lifetime {
-                    return "这笔 App Store 购买已经绑定到另一个叙账账号。请登录购买时的手机号账号恢复；这笔购买不能解绑或转移。"
+                    // 永久买断是一次性购买，说"解绑"会让用户以为还有办法搬走。
+                    return "这笔 App Store 购买已经绑定到另一个叙账账号。请登录购买时使用的手机号账号恢复；这笔购买不能转移到其他账号。"
                 }
-                return "这笔 App Store 订阅已经绑定到另一个叙账账号。请登录购买时的手机号账号恢复；这笔订阅不能解绑或转移。"
+                return "这笔 App Store 订阅已经绑定到另一个叙账账号。请登录购买时使用的手机号账号恢复；这笔订阅不能解绑或转移。"
             }
             return authError.errorDescription ?? genericMessage
         }

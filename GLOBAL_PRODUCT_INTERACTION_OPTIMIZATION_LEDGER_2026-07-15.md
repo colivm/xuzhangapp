@@ -122,6 +122,41 @@
   - 周末和节假日：继续遵守原工作日规则。
 - 冻结边界：不改变历史补记、重复检测、金额推断和会员判断。
 
+### FIX-003：Xcode Cloud XCTest 失败批次修复（2026-09-24）
+
+- 状态：`CODE_DONE`
+- 范围：修复 Xcode Cloud 四台模拟器（iPhone 16 / 16 Pro / 16 Pro Max / SE 3，iOS 27.0）上报的 XCTest 失败。本机为 Windows/MINGW64，没有 Swift 工具链，**无法执行 XCTest**，因此不得标记为 `VERIFIED`。
+- 修改文件：
+  - `NativeDemoApp/Models/InteractionStateModels.swift`
+  - `NativeDemoApp/Views/InsightWebView.swift`
+  - `NativeDemoApp/Services/AuthService.swift`
+  - `NativeDemoApp/Views/Components/WarmRecordDatePanel.swift`
+  - `NativeDemoAppTests/StateRegressionTests.swift`
+- 处理：
+  - `RecordTimeSelectionPolicy.applyingTime` 的 `matchingPolicy` 从 `.nextTimePreservingSmallerComponents` 改为 `.nextTime`。夏令时跳空（洛杉矶 2026-03-08，2:00→3:00）里前者行为未定义且会丢掉分钟，后者在跳过小时的同时保留分钟。
+  - AI 指令识别：把「明确只读动作」与「可信名词短语」拆开。可信名词短语不再能抵消 `不要补记` 这类否定写入，也不再能放行 `生成今天通勤` 这类通用生成。
+  - AI 指令识别：`AICommandRecognitionContext` 新增 `isWriteTask`。补记任务里，既无明确写入动作又无明确只读动作的裸名词短语一律判为 `unsupported`，不再顺势变成查询。
+  - IAP 恢复失败文案：统一为「购买时使用的手机号账号」；永久买断改为「不能转移到其他账号」，不再对一次性购买使用「解绑」。
+  - 测试夹具与自相矛盾的断言修正：记忆墙 6 图节奏应为 `[hero, pair, pair, hero]`（hero 占 1 张、pair 占 2 张，三行只能铺满 5 张）；日用生活印记夹具标题由「超市买菜」改为「买纸巾」，前者会命中优先级更高的 `groceries` 而把更宽的 `daily_supply` 压掉。
+- 冻结边界突破说明（对应第 2 节第 1 条「语义识别」）：
+  - 为什么必须改：AI 指令台的否定写入与通用生成护栏被可信名词短语特性静默绕过，属于会真的放行未被请求写入的缺陷，不能靠改测试回避。
+  - 受影响场景：只读任务里的否定写入、通用生成；补记任务里的裸名词短语。可信名词短语查询（`#hot_commute#` 等）路径未改动。
+  - 迁移方案：无数据迁移；纯判定顺序调整。
+  - 回滚方式：还原 `hasExplicitReadOnlyAction` 拆分与 `isWriteTask` 字段即可。
+  - 新增回归：`testBackfillRequiresStrongAffirmativeWriteLanguage`、`testBackfillTaskDoesNotTurnTheSameNounPhraseIntoAWrite` 已覆盖。
+- 遗留违规待补：提交 `48bbb18` 修改了 `LifeSceneSemanticService.swift`（裙带菜、成人奶粉归类），触及同一条冻结边界但未先更新本文档。该改动本身仍在，需在后续独立任务中补齐边界说明或回退。
+- Windows 已验证：
+  - `git diff --check` 通过。
+  - `python scripts/life_semantic_regression.py` 通过。
+  - `python scripts/copy_lint.py` 通过（7 条既有 warning，均不在本次修改文件内）。
+  - `scripts/experience_static_check.ps1` **未能执行**：本机 PowerShell 的 PATH 上没有 `rg`。已用等价检索确认该脚本第 760、761 行断言的模式在改动后仍然命中。
+- 待验证（Xcode Cloud / 真机）：本批次全部 XCTest 重跑。
+- 未修复、需要下一步定位：
+  - `testQualifiedMomentPhotoCanBecomeAConcreteLead`
+  - `testTrustedTitleBrandAndScenePackStillCreateFacts`
+  - `testHostedEditorTransfersFocusBetweenAmountAndNote`
+  - 三项均已通读产品与测试代码，静态推演下断言应当成立，无法在没有 Swift 运行环境的情况下确定实际失败分支，需要失败日志中的具体断言行。
+
 ---
 
 ## 4. 总执行顺序
