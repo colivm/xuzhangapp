@@ -12497,8 +12497,11 @@ final class InsuranceClassificationBoundaryTests: XCTestCase {
     }
 
     func testGenuineDailySupplyStillCreatesTheExistingLifeMark() {
+        // 标题不能用“超市买菜”：它命中 groceries（优先级 34），而 groceries 在
+        // broadDailySupplySpecificDefinitionIDs 里，会把更宽的 daily_supply 压掉。
+        // 纸巾才是只落在 daily_supply 的日用证据。
         let supply = HomeItem(
-            title: "超市买菜",
+            title: "买纸巾",
             amount: 48,
             category: .daily,
             createdAt: date(day: 11, hour: 18),
@@ -13320,7 +13323,9 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
         XCTAssertEqual(three.flatMap(\.indices), [0, 1, 2])
 
         let six = DiscoverMemoryWallLayoutPolicy.rows(for: 6)
-        XCTAssertEqual(six.map(\.kind), [.hero, .pair, .pair])
+        // hero 占 1 张、pair 占 2 张，[hero, pair, pair] 只能铺满 5 张。
+        // 第 6 张单独成行，只能是 hero。
+        XCTAssertEqual(six.map(\.kind), [.hero, .pair, .pair, .hero])
         XCTAssertEqual(six.flatMap(\.indices), Array(0..<6))
 
         let many = DiscoverMemoryWallLayoutPolicy.rows(for: 9)

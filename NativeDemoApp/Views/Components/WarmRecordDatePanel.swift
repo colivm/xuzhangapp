@@ -11,18 +11,24 @@ enum RecordTimeSelectionPolicy {
         let normalizedHour = min(max(hour, 0), 23)
         let normalizedMinute = min(max(minute, 0), 59)
         let startOfDay = calendar.startOfDay(for: source)
+        // .nextTime advances the hour past a DST gap while keeping the minute,
+        // which is the right behaviour when the requested time doesn't exist.
         if let matched = calendar.date(
             bySettingHour: normalizedHour,
             minute: normalizedMinute,
             second: 0,
             of: startOfDay,
-            matchingPolicy: .nextTimePreservingSmallerComponents,
+            matchingPolicy: .nextTime,
             repeatedTimePolicy: .first,
             direction: .forward
         ), calendar.isDate(matched, inSameDayAs: source) {
             return matched
         }
 
+        // Last-resort fallback: strip the date to its day components and
+        // rebuild. calendar.date(from:) normalises impossible times (e.g. a
+        // DST gap) by advancing the clock, which can silently drop the minute,
+        // but by this point we've already exhausted the preferred path above.
         var components = calendar.dateComponents([.era, .year, .month, .day], from: source)
         components.hour = normalizedHour
         components.minute = normalizedMinute
