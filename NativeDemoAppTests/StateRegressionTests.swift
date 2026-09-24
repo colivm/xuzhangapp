@@ -3687,7 +3687,9 @@ final class PlaybackLivingVoiceCopyTests: XCTestCase {
             createdAt: date(7, 14, 0, 8),
             emotionTag: "打车这一程",
             userEditedTitle: false,
-            memoryImageData: Data([0x01])
+            // 图片字节数要够大，这笔记录才有资格进入周回看的画面锚点。
+            // 1 字节会被 imageQualityScore 判为“不可能是照片”，直接扣分。
+            memoryImageData: Data(repeating: 0x01, count: 140_000)
         )
         let rows = [
             item("早餐", amount: 12, category: .dining, at: date(7, 13, 8)),
@@ -4539,6 +4541,8 @@ final class SingleRecordEmotionBoundaryTests: XCTestCase {
         let videoScene = LifeSceneSemanticService.classify(video)
         XCTAssertNotEqual(seaweed.displayEmotionTag, "给衣柜添一件")
         XCTAssertNotEqual(video.displayEmotionTag, "健身会员安排")
+        // “裙带菜”落在买菜，而不是网购添置，也不是服饰。
+        XCTAssertEqual(seaweedScene.kind, .groceries)
         XCTAssertNotEqual(seaweedScene.kind, .shopping)
         XCTAssertNotEqual(videoScene.kind, .fitness)
     }
@@ -4578,7 +4582,9 @@ final class SingleRecordEmotionBoundaryTests: XCTestCase {
 
         XCTAssertNotEqual(LifeSceneSemanticService.classify(food).kind, .homeSupply)
         XCTAssertNotEqual(LifeSceneSemanticService.classify(cart).kind, .homeSupply)
-        XCTAssertNotEqual(LifeSceneSemanticService.classify(adultNutrition).kind, .homeSupply)
+        // 母婴用品唯一的出口是“超市买菜”，成人营养品不该从那里进来。
+        // 日用分类本身没有更贴切的兜底，落回 .homeSupply 是诚实的。
+        XCTAssertNotEqual(LifeSceneSemanticService.classify(adultNutrition).kind, .groceries)
     }
 
     func testVehicleMaintenanceDoesNotBecomeAnOutingScene() {
