@@ -4032,6 +4032,8 @@ struct BillPlaybackSheet: View {
             return "今天在路上的一段。"
         case .cityRoute:
             return "今天出门办了点事。"
+        case .vehicleCare:
+            return "车这边安排了一下。"
         case .breakfast:
             return "早上先吃了口东西。"
         case .quickMeal, .workMeal:
@@ -4098,6 +4100,8 @@ struct BillPlaybackSheet: View {
             return "这笔在雨天通勤里。路上可能慢一点，也更费一点心。"
         case .cityRoute:
             return "这趟路带着雨天背景，不是很普通的一次出门。"
+        case .vehicleCare:
+            return "雨天开车或充电，路上慢一点。"
         default:
             return "这笔旁边有雨天背景。今天的天气也在这条记录里。"
         }

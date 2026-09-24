@@ -7,6 +7,7 @@ enum LifeSceneKind: String, CaseIterable, Hashable {
     case workMeal
     case commute
     case cityRoute
+    case vehicleCare
     case convenienceSupply
     case groceries
     case homeSupply
@@ -212,6 +213,14 @@ enum LifeSceneSemanticService {
                 semanticTag: "#出门办事",
                 supportTag: "#城市里移动"
             )
+        case .vehicleCare:
+            return LifeSceneWeeklyCopy(
+                fact: "用车这块记了 \(count) 次",
+                cares: ["车的事情安排好，路上就少一点担心", "充电、保养这些，也是在把日子理顺"],
+                leadingTag: "#用车\(count)次",
+                semanticTag: "#车上的事",
+                supportTag: "#一路顺利"
+            )
         case .convenienceSupply:
             return LifeSceneWeeklyCopy(
                 fact: "便利店和即时补给记了 \(count) 次",
@@ -381,6 +390,8 @@ enum LifeSceneSemanticService {
             return "人情往来记一笔"
         case .leisure:
             return "放松娱乐记一笔"
+        case .vehicleCare:
+            return amount <= 20 ? "充电补能记一笔" : "车这边记一笔"
         case .errand:
             return "临时办事记一笔"
         case .general:
@@ -550,7 +561,7 @@ enum LifeSceneSemanticService {
         case .dining:
             return LifeSceneSignal(kind: .quickMeal, category: .dining, score: 2.4, label: "吃饭", tag: "#吃饭", priority: 80)
         case .transport:
-            return LifeSceneSignal(kind: .cityRoute, category: .transport, score: 2.4, label: "出行", tag: "#出行", priority: 80)
+            return LifeSceneSignal(kind: .vehicleCare, category: .transport, score: 2.4, label: "用车", tag: "#用车", priority: 80)
         case .shopping:
             return LifeSceneSignal(kind: .shopping, category: .shopping, score: 2.2, label: "网购添置", tag: "#快递到了", priority: 80)
         case .daily:

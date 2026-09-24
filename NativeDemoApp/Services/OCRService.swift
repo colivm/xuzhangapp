@@ -281,20 +281,20 @@ enum OCRDateEvidencePolicy {
             }
             if let raw = firstMatch(
                 in: line,
-                pattern: #"(?<!\d)20\d{2}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}\s*日?(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?"#
+                pattern: #"(?<!\d)20\d{2}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}(?:\s*日)?(?:\s+(?=\d{1,2}:\d{2})\d{1,2}:\d{2}(?::\d{2})?)?"#
             ), let date = parse(raw, now: now, calendar: calendar) {
                 return date
             }
             if let raw = firstMatch(
                 in: line,
-                pattern: #"(?<![\d¥￥])\d{1,2}\s*月\s*\d{1,2}\s*日(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?"#
+                pattern: #"(?<![\d¥￥])\d{1,2}\s*月\s*\d{1,2}\s*日(?:\s+(?=\d{1,2}:\d{2})\d{1,2}:\d{2}(?::\d{2})?)?"#
             ), let date = parse(raw, now: now, calendar: calendar) {
                 return date
             }
             if hasDateLabel,
                let raw = firstMatch(
                 in: line,
-                pattern: #"(?<![\d¥￥])\d{1,2}\s*[-/.]\s*\d{1,2}(?!\d)(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?"#
+                pattern: #"(?<![\d¥￥])\d{1,2}\s*[-/.]\s*\d{1,2}(?!\d)(?:\s+(?=\d{1,2}:\d{2})\d{1,2}:\d{2}(?::\d{2})?)?"#
                ), let date = parse(raw, now: now, calendar: calendar) {
                 return date
             }
@@ -353,7 +353,7 @@ enum OCRDateEvidencePolicy {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = calendar.timeZone
         formatter.isLenient = false
-        for format in ["yyyy-M-d HH:mm:ss", "yyyy-M-d HH:mm", "yyyy-M-d"] {
+        for format in ["yyyy-M-d HH:mm:ss", "yyyy-M-d HH:mm", "yyyy-M-d H:mm:ss", "yyyy-M-d H:mm", "yyyy-M-d"] {
             formatter.dateFormat = format
             if let date = formatter.date(from: normalized) {
                 return date

@@ -847,6 +847,8 @@ enum LifeNarrativeSignalPolicy {
             return 74
         case .commute, .cityRoute:
             return 70
+        case .vehicleCare:
+            return 64
         case .shopping, .groceries:
             return 62
         case .errand:

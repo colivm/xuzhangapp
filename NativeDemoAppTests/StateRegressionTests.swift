@@ -1016,6 +1016,59 @@ final class OCRDateEvidencePolicyTests: XCTestCase {
         XCTAssertEqual(calendar.component(.hour, from: full), 8)
         XCTAssertEqual(calendar.component(.day, from: labeledBare), 22)
     }
+
+    func testSingleDigitClockTimesSurviveParsing() throws {
+        let explicit = try XCTUnwrap(OCRDateEvidencePolicy.firstDate(
+            in: "交易时间 2026-04-21 8:35",
+            now: now,
+            calendar: calendar
+        ))
+        let chinese = try XCTUnwrap(OCRDateEvidencePolicy.firstDate(
+            in: "2026年4月21日 8:35",
+            now: now,
+            calendar: calendar
+        ))
+        let labeledBare = try XCTUnwrap(OCRDateEvidencePolicy.firstDate(
+            in: "日期
+4.22 8:35",
+            now: now,
+            calendar: calendar
+        ))
+
+        XCTAssertEqual(calendar.component(.day, from: explicit), 21)
+        XCTAssertEqual(calendar.component(.hour, from: explicit), 8)
+        XCTAssertEqual(calendar.component(.minute, from: explicit), 35)
+
+        XCTAssertEqual(calendar.component(.day, from: chinese), 21)
+        XCTAssertEqual(calendar.component(.hour, from: chinese), 8)
+        XCTAssertEqual(calendar.component(.minute, from: chinese), 35)
+
+        XCTAssertEqual(calendar.component(.day, from: labeledBare), 22)
+        XCTAssertEqual(calendar.component(.hour, from: labeledBare), 8)
+        XCTAssertEqual(calendar.component(.minute, from: labeledBare), 35)
+    }
+
+    func testDigitsGluedToTheDateDoNotBecomeAClockTime() throws {
+        let explicit = try XCTUnwrap(OCRDateEvidencePolicy.firstDate(
+            in: "交易时间 2026-04-2108:35",
+            now: now,
+            calendar: calendar
+        ))
+        let chinese = try XCTUnwrap(OCRDateEvidencePolicy.firstDate(
+            in: "4月20日08:35",
+            now: now,
+            calendar: calendar
+        ))
+
+        XCTAssertEqual(calendar.component(.day, from: explicit), 21)
+        XCTAssertEqual(calendar.component(.hour, from: explicit), 0)
+        XCTAssertEqual(calendar.component(.minute, from: explicit), 0)
+
+        XCTAssertEqual(calendar.component(.month, from: chinese), 4)
+        XCTAssertEqual(calendar.component(.day, from: chinese), 20)
+        XCTAssertEqual(calendar.component(.hour, from: chinese), 0)
+        XCTAssertEqual(calendar.component(.minute, from: chinese), 0)
+    }
 }
 
 final class OCRCategoryEvidencePolicyTests: XCTestCase {
