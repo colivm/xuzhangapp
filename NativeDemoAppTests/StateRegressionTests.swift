@@ -6100,21 +6100,39 @@ final class RecordInputAssistanceSnapshotTests: XCTestCase {
 
     func testManualAmountMatchesShortcutAmountWhenHistoryHasStableMerchantTitle() {
         let calendar = Calendar.current
-        let referenceDate = calendar.date(
-            bySettingHour: 9,
-            minute: 8,
-            second: 0,
-            of: Date()
-        ) ?? Date()
-        let repeated = (0..<3).map { index in
-            HomeItem(
+        // A fixed local Friday. The three supporting records land on Thu/Wed/Tue,
+        // so they share the reference day's `dayKind` (workday) whenever the suite
+        // runs. Anchoring to `Date()` made this test pass only on Thursday and
+        // Friday: every other weekday pulled a weekend day into the lookback and
+        // dropped the matching-context records below the floor of 3, which empties
+        // `frequentSuggestions` and leaves the prefill title/category nil.
+        var referenceComponents = DateComponents()
+        referenceComponents.year = 2026
+        referenceComponents.month = 9
+        referenceComponents.day = 25
+        referenceComponents.hour = 9
+        referenceComponents.minute = 8
+        referenceComponents.second = 0
+        guard let referenceDate = calendar.date(from: referenceComponents) else {
+            return XCTFail("The fixed reference date must exist in the test calendar.")
+        }
+        // Shift by calendar days rather than 86_400s so a DST transition cannot
+        // move these records into a neighbouring hour bucket.
+        let repeated: [HomeItem] = (0..<3).compactMap { index in
+            guard let createdAt = calendar.date(
+                byAdding: .day,
+                value: -(index + 1),
+                to: referenceDate
+            ) else { return nil }
+            return HomeItem(
                 title: "瑞幸咖啡",
                 amount: 9.9,
                 category: .dining,
-                createdAt: referenceDate.addingTimeInterval(TimeInterval(-(index + 1) * 86_400)),
+                createdAt: createdAt,
                 userEditedTitle: true
             )
         }
+        XCTAssertEqual(repeated.count, 3)
         var supporting: [HomeItem] = repeated
         for index in 0..<3 {
             supporting.append(

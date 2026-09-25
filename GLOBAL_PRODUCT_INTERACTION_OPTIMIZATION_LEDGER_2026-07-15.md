@@ -140,6 +140,8 @@
   - 测试夹具与自相矛盾的断言修正：记忆墙 6 图节奏应为 `[hero, pair, pair, hero]`（hero 占 1 张、pair 占 2 张，三行只能铺满 5 张）；日用生活印记夹具标题由「超市买菜」改为「买纸巾」，前者会命中优先级更高的 `groceries` 而把更宽的 `daily_supply` 压掉。
   - `testDSTGapUsesAValidTimeOnTheSameLocalDay`（2026-09-25 补）：`matchingPolicy: .nextTime` 在夏令时跳空（America/Los_Angeles 2026-03-08，02:00→03:00）时返回跳变边界 03:00:00，分钟被清零，且结果仍在同一天导致提前返回，兜底路径变成死代码。改为逐小时前进并用回读校验 hour+minute 均与设定值相符，跳空时继续递增到 03:30，不可表示时退到当天最后一刻。三个兄弟测试均在首次迭代命中，行为不变。
   - `testQualifiedMomentPhotoCanBecomeAConcreteLead`（2026-09-25 补）：夹具标题「红汤馄饨」4 字，落入 `RecordPrefillService.isHabitTitle` 的 2...12 字范围，被 `EchoAnchorService.isEligibleLifeTraceTitle` 拒绝，`safeTitle` 降级为分类标签。`isHabitTitle` 有 5 处生产调用点（预填、习惯词复用、通勤草稿、仪表盘），放宽属越界改动；改为把夹具标题换成 13 字的「楼下那家红汤馄饨配一碟小菜」，超过 12 字上限，门放行，`compact(limit:18)` 不截断，三个断言全部成立。
+  - `testManualAmountMatchesShortcutAmountWhenHistoryHasStableMerchantTitle`（2026-09-25 补）：夹具以 `Date()` 当参考日，三条「瑞幸咖啡」证据落在 D-1/D-2/D-3。`RecordInputAssistanceComputation.frequentRecordAmountSuggestions` 要求 `contextItems` 与参考日同 `dayKind` 且至少 3 条，只有参考日为周四或周五时 D-1..D-3 才全是工作日；其余任何星期都会把周末拉进回看窗口，`contextItems` 掉到 3 以下，`frequentSuggestions` 为空，于是 `snapshot.result?.title` 与 `appliedCategory` 双双为 `nil`。这也解释了它不在 2026-09-24 首批失败里、本次才出现：属随运行星期漂移的假失败。改为固定本地周五 2026-09-25 09:08 构造参考日，并用 `calendar.date(byAdding: .day)` 而非 `86_400` 秒位移证据日期，避免夏令时把记录挪出 hour bucket。仅改测试夹具，未动生产判定。
+- 本次未采纳的改动（2026-09-25）：为 `testHostedEditorTransfersFocusBetweenAmountAndNote` 曾试写「`textFieldDidEndEditing` 在模型仍要求聚焦时重申 first responder」+「`dismissKeyboard` 先清标志再 resign」，已全部回退。原因：第 822 行 `amount.becomeFirstResponder()` 会让备注字段进入 `textFieldDidEndEditing`，此时 `isNoteFieldFocused` 仍为 `true`，重申逻辑会把焦点从金额抢回，反而打破第 824/825 行断言；真实场景里用户点击别处收起键盘也会被强行拉回。在没有 Swift 运行环境、无法区分「SwiftUI 因兄弟 `@FocusState` 清零而驱逐」与「用户主动移交焦点」之前，不投机改动响应链。
 - 冻结边界突破说明（对应第 2 节第 1 条「语义识别」）：
   - 为什么必须改：AI 指令台的否定写入与通用生成护栏被可信名词短语特性静默绕过，属于会真的放行未被请求写入的缺陷，不能靠改测试回避。
   - 受影响场景：只读任务里的否定写入、通用生成；补记任务里的裸名词短语。可信名词短语查询（`#hot_commute#` 等）路径未改动。
@@ -155,9 +157,10 @@
   - 2026-09-25 补：`testDSTGapUsesAValidTimeOnTheSameLocalDay` 与 `testQualifiedMomentPhotoCanBecomeAConcreteLead` 两项修复后，`git diff --check` / `life_semantic_regression.py` / `copy_lint.py` 全部重新通过；7 条既有 warning 不变，无新增 warning。
 - 待验证（Xcode Cloud / 真机）：本批次全部 XCTest 重跑。
 - 未修复、需要下一步定位：
-  - `testTrustedTitleBrandAndScenePackStillCreateFacts`
-  - `testHostedEditorTransfersFocusBetweenAmountAndNote`
-  - 两项均已通读产品与测试代码，静态推演下断言应当成立，无法在没有 Swift 运行环境的情况下确定实际失败分支，需要失败日志中的具体断言行。
+  - `testHostedEditorTransfersFocusBetweenAmountAndNote`（失败点：`StateRegressionTests.swift:820`）
+  - 已定位到失败只可能出现在 `for _ in 0..<2` 的第二轮：第一轮结束时 `isAmountFieldFocused` 为 `true`，第二轮第 813 行备注抢到 first responder 后，备注绑定 setter 把 `isAmountFieldFocused` 清零；推断 SwiftUI 处理这次 `@FocusState` 清零时 resign 了窗口的 first responder，把刚聚焦的备注字段驱逐，随后 `textFieldDidEndEditing` 把 `isNoteFieldFocused` 也写成 `false`，使丢焦点固化，因此第 820 行 `XCTAssertTrue(note.isFirstResponder)` 失败；第一轮没有金额焦点可清，所以能过。同类的 `testHostedEditorKeepsNoteFocusAcrossDeletionAndInsertionUntilSave`（纯备注编辑，无金额交接）通过，与该推断一致。
+  - 阻塞原因：该推断需要在真机/模拟器上观察 SwiftUI 焦点系统的驱逐范围才能确认，Windows 无 Swift 运行环境。修复方案必须能区分「兄弟 `@FocusState` 清零导致的驱逐」与「用户主动把焦点交给金额字段」，否则会打破同一测试第 824/825 行的互斥断言。建议下一步在 macOS 上取该测试第二轮的 `textFieldDidEndEditing` 调用栈后再改。
+- 已从失败清单移除（2026-09-25）：`testTrustedTitleBrandAndScenePackStillCreateFacts` 未出现在提交 `c0dd306` 的 Xcode Cloud 结果中；但本批次并未针对它改动任何代码，故不能判定为已修复，需在下次重跑中确认是否为间歇性失败。
 
 ---
 
