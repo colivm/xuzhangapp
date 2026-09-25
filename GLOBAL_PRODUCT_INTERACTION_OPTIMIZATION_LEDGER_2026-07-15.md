@@ -126,6 +126,7 @@
 
 - 状态：`CODE_DONE`
 - 范围：修复 Xcode Cloud 四台模拟器（iPhone 16 / 16 Pro / 16 Pro Max / SE 3，iOS 27.0）上报的 XCTest 失败。本机为 Windows/MINGW64，没有 Swift 工具链，**无法执行 XCTest**，因此不得标记为 `VERIFIED`。
+  - 2026-09-25 macOS 复核：已在本机执行 XCTest，本条两条待办用例均转绿。但**本机设备矩阵与交接文档不一致**——本机为 Xcode 26.4.1，仅装有 iOS 26.4 运行时，没有 iPhone 16 系列，也**没有 iPhone SE（第三代）**。交接文档第 6 步的四机横扫按原样无法执行，故仍不标记 `VERIFIED`，需在具备该矩阵的机器或 Xcode Cloud 上补跑。
 - 修改文件：
   - `NativeDemoApp/Models/InteractionStateModels.swift`
   - `NativeDemoApp/Views/InsightWebView.swift`
@@ -142,6 +143,15 @@
   - `testQualifiedMomentPhotoCanBecomeAConcreteLead`（2026-09-25 补）：夹具标题「红汤馄饨」4 字，落入 `RecordPrefillService.isHabitTitle` 的 2...12 字范围，被 `EchoAnchorService.isEligibleLifeTraceTitle` 拒绝，`safeTitle` 降级为分类标签。`isHabitTitle` 有 5 处生产调用点（预填、习惯词复用、通勤草稿、仪表盘），放宽属越界改动；改为把夹具标题换成 13 字的「楼下那家红汤馄饨配一碟小菜」，超过 12 字上限，门放行，`compact(limit:18)` 不截断，三个断言全部成立。
   - `testManualAmountMatchesShortcutAmountWhenHistoryHasStableMerchantTitle`（2026-09-25 补）：夹具以 `Date()` 当参考日，三条「瑞幸咖啡」证据落在 D-1/D-2/D-3。`RecordInputAssistanceComputation.frequentRecordAmountSuggestions` 要求 `contextItems` 与参考日同 `dayKind` 且至少 3 条，只有参考日为周四或周五时 D-1..D-3 才全是工作日；其余任何星期都会把周末拉进回看窗口，`contextItems` 掉到 3 以下，`frequentSuggestions` 为空，于是 `snapshot.result?.title` 与 `appliedCategory` 双双为 `nil`。这也解释了它不在 2026-09-24 首批失败里、本次才出现：属随运行星期漂移的假失败。改为固定本地周五 2026-09-25 09:08 构造参考日，并用 `calendar.date(byAdding: .day)` 而非 `86_400` 秒位移证据日期，避免夏令时把记录挪出 hour bucket。仅改测试夹具，未动生产判定。
 - 本次未采纳的改动（2026-09-25）：为 `testHostedEditorTransfersFocusBetweenAmountAndNote` 曾试写「`textFieldDidEndEditing` 在模型仍要求聚焦时重申 first responder」+「`dismissKeyboard` 先清标志再 resign」，已全部回退。原因：第 822 行 `amount.becomeFirstResponder()` 会让备注字段进入 `textFieldDidEndEditing`，此时 `isNoteFieldFocused` 仍为 `true`，重申逻辑会把焦点从金额抢回，反而打破第 824/825 行断言；真实场景里用户点击别处收起键盘也会被强行拉回。在没有 Swift 运行环境、无法区分「SwiftUI 因兄弟 `@FocusState` 清零而驱逐」与「用户主动移交焦点」之前，不投机改动响应链。
+- 焦点用例已修复（2026-09-25，macOS）：`NativeDemoApp/Views/FocusedRecordEditor.swift` 的备注字段 `isFocused` 绑定 setter 去掉 `if $0 { isAmountFieldFocused = false }`。
+  - **机制（由调用栈确认，非推断）**：`FocusedRecordEditor.swift` 第 442 行在备注字段 `textFieldDidBeginEditing` 阶段把 `isAmountFieldFocused` 写成 `false`。此时备注**已经是** first responder，UIKit 早已把金额字段 resign 掉。SwiftUI 的 `FocusStore` 在下一个渲染帧处理这次 `true→false` 转变时，会 resign「当时」的 first responder——也就是刚拿到焦点的备注字段自己。采集到的第二轮栈证实这一点：`FocusStore.Entry.updateFocus` → `FocusStoreLocation.set` → `Update.dispatchActions` → `ViewGraphRootValueUpdater.render`，栈上**没有任何 `becomeFirstResponder`**，即并非焦点移交，而是焦点系统单方面驱逐。
+  - **为何只有第二轮失败**：第一轮开始时金额字段从未真正拿到过焦点，写入 `false` 是 no-op，没有可处理的转变；第二轮 `isAmountFieldFocused` 为 `true`，才是第一次真实的 `true→false`，驱逐因此发生。这也解释了交接文档与本文档原先的推断（第二轮才失败）为何成立。
+  - **修复为何满足第 5 步两条约束**：该写法不新增任何 `becomeFirstResponder` 重申逻辑。`@FocusState` 本身已镜像金额字段的真实 responder 状态，UIKit 把金额字段 resign 后它会自行归零，显式写入是冗余的。因此 (a) 不会在第 822 行把焦点从金额抢回，第 824/825 行互斥断言保持成立；(b) 不会在用户点击别处收起键盘时把键盘拉回。
+  - **验证证据**：`xcodebuild test -destination 'platform=iOS Simulator,name=iPhone 17'`（Xcode 26.4.1 / iOS 26.4）。`CommittedRecordNoteFieldTests` 全部 7 项通过；`testHostedEditorTransfersFocusBetweenAmountAndNote` 两轮 `note.isFirstResponder` 均为真；`testManualAmountMatchesShortcutAmountWhenHistoryHasStableMerchantTitle` 通过。临时采集用的 `print`、`for iteration` 改名与 `debugDescribeFirstResponder` 辅助函数均已删除，`RecordView.swift` 未留下任何改动。
+  - **遗留风险**：以上均在 iPhone 17 / iOS 26.4 上取得，与 Xcode Cloud 的 iPhone 16 系列 / iOS 27.0 不同代。焦点系统的驱逐时机属 SwiftUI 内部行为，跨 iOS 版本仍可能变化，需在目标矩阵上复跑确认。
+- 夹具参考日修正（2026-09-25，macOS）：`testManualAmountMatchesShortcutAmountWhenHistoryHasStableMerchantTitle` 的参考日由 2026-09-25 改为 2026-10-09。
+  - **原因**：2026-09-25 是中秋节（农历八月十五），`RecordCalendarContext.dayKind(for:)` 经 `isTraditionalMainlandChinaPublicFestival` 判定为 `.holiday`，而不是夹具注释所设想的 `.workday`。三条「瑞幸咖啡」证据落在周四/三/二（工作日），与参考日的 `dayKind` 不匹配，`frequentRecordAmountSuggestions` 的 `contextItems` 归零，掉到 `>= 3` 下限以下，`frequentSuggestions` 为空。原注释的前提在该日期上不成立。
+  - 2026-10-09 是下一个 D-0..D-3 窗口内无节假日的周五。仅改测试夹具，未动生产判定。
 - 冻结边界突破说明（对应第 2 节第 1 条「语义识别」）：
   - 为什么必须改：AI 指令台的否定写入与通用生成护栏被可信名词短语特性静默绕过，属于会真的放行未被请求写入的缺陷，不能靠改测试回避。
   - 受影响场景：只读任务里的否定写入、通用生成；补记任务里的裸名词短语。可信名词短语查询（`#hot_commute#` 等）路径未改动。
@@ -157,10 +167,10 @@
   - 2026-09-25 补：`testDSTGapUsesAValidTimeOnTheSameLocalDay` 与 `testQualifiedMomentPhotoCanBecomeAConcreteLead` 两项修复后，`git diff --check` / `life_semantic_regression.py` / `copy_lint.py` 全部重新通过；7 条既有 warning 不变，无新增 warning。
 - 待验证（Xcode Cloud / 真机）：本批次全部 XCTest 重跑。
 - 未修复、需要下一步定位：
-  - `testHostedEditorTransfersFocusBetweenAmountAndNote`（失败点：`StateRegressionTests.swift:820`）
-  - 已定位到失败只可能出现在 `for _ in 0..<2` 的第二轮：第一轮结束时 `isAmountFieldFocused` 为 `true`，第二轮第 813 行备注抢到 first responder 后，备注绑定 setter 把 `isAmountFieldFocused` 清零；推断 SwiftUI 处理这次 `@FocusState` 清零时 resign 了窗口的 first responder，把刚聚焦的备注字段驱逐，随后 `textFieldDidEndEditing` 把 `isNoteFieldFocused` 也写成 `false`，使丢焦点固化，因此第 820 行 `XCTAssertTrue(note.isFirstResponder)` 失败；第一轮没有金额焦点可清，所以能过。同类的 `testHostedEditorKeepsNoteFocusAcrossDeletionAndInsertionUntilSave`（纯备注编辑，无金额交接）通过，与该推断一致。
-  - 阻塞原因：该推断需要在真机/模拟器上观察 SwiftUI 焦点系统的驱逐范围才能确认，Windows 无 Swift 运行环境。修复方案必须能区分「兄弟 `@FocusState` 清零导致的驱逐」与「用户主动把焦点交给金额字段」，否则会打破同一测试第 824/825 行的互斥断言。建议下一步在 macOS 上取该测试第二轮的 `textFieldDidEndEditing` 调用栈后再改。
-- 已从失败清单移除（2026-09-25）：`testTrustedTitleBrandAndScenePackStillCreateFacts` 未出现在提交 `c0dd306` 的 Xcode Cloud 结果中；但本批次并未针对它改动任何代码，故不能判定为已修复，需在下次重跑中确认是否为间歇性失败。
+  - `testHostedEditorTransfersFocusBetweenAmountAndNote`（失败点：`StateRegressionTests.swift:820`）—— **已于 2026-09-25 在 macOS 上修复并验证通过，见上方「焦点用例已修复」条目**。原推断（第二轮、`@FocusState` 清零导致驱逐）方向正确，调用栈已确认。
+  - `testDeferredQuickNotesKeepRecommendationAndHistoricalPoolIdentical`（2026-09-25 新发现，失败点：`StateRegressionTests.swift:5794`、`5798`）：断言 `combined.quickNoteTitlesByContext` 非空失败。**已在干净 HEAD（`git stash` 后）复跑，同样失败**，与本次改动无关，属既有失败。该用例用 `Date()` 相对偏移（`calendar.date(byAdding: .day, value: -$0, to: reference)`，`reference` 为今天 18:43）构造 D-1..D-60 中前 8 个同 `dayKind` 的日子，因此随运行日期漂移，须单独定位。
+  - `testTrustedTitleBrandAndScenePackStillCreateFacts`（失败点：`StateRegressionTests.swift:7660`，`marks.contains { $0.id == "groceries" }`）：**已在干净 HEAD 复跑，同样失败**，确认不是间歇性失败而是稳定失败。本文档下方原记录「未出现在 `c0dd306` 的 Xcode Cloud 结果中，可能是间歇性失败」应更正为「稳定失败，需定位」。夹具为「今天这一单」+ `merchantBrandId: "freshippo"`，`LifeMarkService.aggregates` 未产出 `groceries` mark。
+- 已从失败清单移除（2026-09-25）：`testTrustedTitleBrandAndScenePackStillCreateFacts` 未出现在提交 `c0dd306` 的 Xcode Cloud 结果中。**2026-09-25 更正**：本机在干净 HEAD 上复跑确认它**稳定失败**（`StateRegressionTests.swift:7660`），并非间歇性失败，因此不能视为已移除，须重新列入失败清单定位。
 
 ---
 

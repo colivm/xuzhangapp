@@ -439,7 +439,12 @@ struct FocusedRecordEditor: View {
                     get: { isNoteFieldFocused },
                     set: {
                         isNoteFieldFocused = $0
-                        if $0 { isAmountFieldFocused = false }
+                        // Do not clear `isAmountFieldFocused` here. UIKit has already
+                        // resigned the amount field by the time the note reports focus,
+                        // and `@FocusState` mirrors that on its own. Writing false again
+                        // makes SwiftUI's focus store replay the transition on the next
+                        // render pass, where it resigns whoever holds focus then - the
+                        // note field itself.
                     }
                 ),
                 font: .systemFont(ofSize: 14, weight: .semibold),

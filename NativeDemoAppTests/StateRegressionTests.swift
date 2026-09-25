@@ -6100,16 +6100,16 @@ final class RecordInputAssistanceSnapshotTests: XCTestCase {
 
     func testManualAmountMatchesShortcutAmountWhenHistoryHasStableMerchantTitle() {
         let calendar = Calendar.current
-        // A fixed local Friday. The three supporting records land on Thu/Wed/Tue,
-        // so they share the reference day's `dayKind` (workday) whenever the suite
-        // runs. Anchoring to `Date()` made this test pass only on Thursday and
-        // Friday: every other weekday pulled a weekend day into the lookback and
-        // dropped the matching-context records below the floor of 3, which empties
-        // `frequentSuggestions` and leaves the prefill title/category nil.
+        // A fixed local Friday that is a plain workday (not a public holiday).
+        // 2026-09-25 was the original pick but it falls on Mid-Autumn Festival
+        // (lunar 8/15), which RecordCalendarContext classifies as .holiday, so the
+        // reference day's dayKind never matches the workday D-1..D-3 context items
+        // and frequentSuggestions is always empty on that date.
+        // 2026-10-09 is the next Friday with no holiday in the D-0..D-3 window.
         var referenceComponents = DateComponents()
         referenceComponents.year = 2026
-        referenceComponents.month = 9
-        referenceComponents.day = 25
+        referenceComponents.month = 10
+        referenceComponents.day = 9
         referenceComponents.hour = 9
         referenceComponents.minute = 8
         referenceComponents.second = 0
