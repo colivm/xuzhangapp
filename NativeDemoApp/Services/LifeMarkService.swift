@@ -1583,7 +1583,7 @@ enum LifeMarkService {
             return categoryMatched && SemanticBoundaryGuard.matchesPetSupply(text)
         }
         if definition.id == "groceries",
-           SemanticBoundaryGuard.isHouseholdCleaningSupply(text) {
+           SemanticBoundaryGuard.isHouseholdCleaningSupply(dailySupplyEvidenceText(for: item)) {
             return false
         }
         if item.scenePackId == "family", definition.id == "daily_supply" {

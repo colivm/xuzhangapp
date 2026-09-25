@@ -6208,4 +6208,26 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 根因与修复：`lifeSliceSafeSharePhotoCaption` 之前直接复用普通照片 caption，现对 `.careRecord` 按 `.healthRecord`/其他照护场景固定输出“一条健康记录”/“一条照护记录”；`PhotoMemoryPromptPolicy.isRoutineCommute` 之前把包含“下班”的娱乐标题按通勤信号拦截，现保留明确电影/展览等体验证据，允许自动照片元数据重算为 `.moment` + `.experience`。
 - 修改文件：`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`NativeDemoApp/Services/PhotoMemoryPromptPolicy.swift` 和本台账。未修改 IAP/StoreKit、后端、生产分支或未跟踪资料。
 - 验证边界：已完成 `git diff --check`；Windows 没有 Swift/Xcode，无法本地执行 XCTest。提交后必须用包含本节改动的同一 commit 在 Xcode Cloud Test action 重新运行，并将 Test action 并行 worker 设为 1/关闭 parallel testing 后再判断剩余失败。
+
+### 212. FIX-004：修复 LifeMarkService groceries 边界误杀所有 .daily 类目条目（2026-09-26）
+
+- 状态：`VERIFIED`
+- 问题：`LifeMarkFactAuthorityTests/testTrustedTitleBrandAndScenePackStillCreateFacts` 在 `marks.contains { $0.id == "groceries" }` 处失败。
+- 根因：`LifeMarkService.matches()` 第 1585-1588 行的 groceries 边界守卫调用 `SemanticBoundaryGuard.isHouseholdCleaningSupply(text)`，其中 `text = semanticText(for: item)`。`semanticText` 始终把 `item.category.rawValue`（`.daily` → `"日用"`）和 `item.category.label`（同为 `"日用"`）拼入结果，而 `householdCleaningKeywords` 包含 `"日用"`，因此所有 `.daily` 类目条目都被守卫过滤，永远不会产生 `groceries` 标记。
+- 修复范围：仅修改 `NativeDemoApp/Services/LifeMarkService.swift` 第 1586 行，将守卫的文本参数从 `text`（`semanticText`）改为 `dailySupplyEvidenceText(for: item)`。`dailySupplyEvidenceText` 不含 `category.rawValue` 与 `category.label`，只含 `factualTitle`、品牌信息、城市、语义场所和 scenePackId，可以精确区分真正的家务清洁品（标题带"清洁""纸巾"等词）与普通 `.daily` 消费。
+- 冻结边界：不修改 `dailySupplyEvidenceText`、`semanticText`、`householdCleaningKeywords` 或其他守卫逻辑；不触碰 `baby_supply`、`pet_supply`、`daily_supply` 相关分支；不重构 `matches()` 的其他部分。
+- 验证证据：2026-09-26 本机 iPhone 16 Pro 模拟器（iOS 26.4，`xcrun simctl create`）执行。第一轮四条定向用例全通过：目标用例 `testTrustedTitleBrandAndScenePackStillCreateFacts` 由失败转通过，两条反向守卫用例 `testGeneratedDisplayCopyDoesNotCreateGroceryOrSocialFacts`、`testLegacyInsuranceMisclassifiedAsDailyDoesNotCreateSupplyLifeMark` 保持通过。第二轮扩面跑 `LifeMarkFactAuthorityTests`、`InsuranceClassificationBoundaryTests`、`RecordSemanticDiningBoundaryTests`、`AICommandTrustedSemanticFacetTests`、`RecordInputAssistanceSnapshotTests`、`LifeJourneyFactRegressionTests` 共 6 个套件 42 条用例，`0 failures`，`** TEST SUCCEEDED **`。
+- 验证边界：本轮未执行 `NativeDemoAppTests` 全量套件，只覆盖 LifeMark 语义边界与记账输入辅助相关的 6 个套件。全量回归仍需在 Xcode Cloud 串行 Test action 复跑确认。
+- 剩余风险：`dailySupplyEvidenceText` 不含类目词，若某条目的标题本身没有家务关键词但实际是清洁品，守卫会放行。这是比修复前更合理的行为（依赖标题语义），与产品预期一致。
+
+### 213. FIX-005：修复 testDeferredQuickNotes 夹具随节假日漂移失败（2026-09-26）
+
+- 状态：`VERIFIED`（独立测试夹具问题，未改动产品代码）
+- 问题：`RecordInputAssistanceSnapshotTests/testDeferredQuickNotesKeepRecommendationAndHistoricalPoolIdentical` 在 `XCTAssertFalse(combined.quickNoteTitlesByContext.isEmpty)` 和 `XCTAssertFalse(critical.frequentSuggestions.isEmpty)` 失败。
+- 根因：测试第 5781 行使用 `Date()` 作为 `reference`，当运行日恰好落在 `.holiday` 类型（如中秋、国庆等），`RecordQuickNotePolicy.historicalTitles` 过滤 `dayKind` 一致的历史日，过去 60 天内无同类型日期，导致 `items` 为空，`quickNoteTitlesByContext` 为空，`frequentSuggestions` 也为空。
+- 修复范围：仅修改 `NativeDemoAppTests/StateRegressionTests.swift` 第 5781 行，将 `Date()` 替换为通过 `DateComponents` 硬编码的固定工作日（2026-10-09，周五，非节假日），与 FIX-003 预填夹具的固定日期方案一致。
+- 冻结边界：不修改 `RecordCalendarContext`、`RecordQuickNotePolicy`、`RecordInputAssistanceComputation` 或产品逻辑。
+- 验证证据：2026-09-26 本机 iPhone 16 Pro 模拟器（iOS 26.4）执行 `NativeDemoAppTests/RecordInputAssistanceSnapshotTests/testDeferredQuickNotesKeepRecommendationAndHistoricalPoolIdentical` 由失败转通过；扩面跑整个 `RecordInputAssistanceSnapshotTests` 套件 9 条用例全通过。夹具改为固定日后不再随运行日星期或农历节假日漂移。
+- 剩余风险：同套件内若还有其他用例使用 `Date()`，仍可能在特定运行日漂移。本轮只按 FIX-005 范围修正第 5781 行这一处，未横扫排查，留作后续独立任务。
+- 下一任务：FIX-004、FIX-005 均已 `VERIFIED`。`RELEASE-02` 继续 `BLOCKED`，剩余风险仍为 Xcode Cloud 全量 Test action、Debug/Release Archive、device-audit、Instruments 与封版真机证据未闭环。
 - 状态与剩余风险：本节源码为 `CODE_DONE`；`RELEASE-02` 继续 `BLOCKED`。附件中其他 LifeNarrative、Discover、输入辅助和 IAP 失败尚未证明是独立产品缺陷，需在串行且确认 commit 的新日志中复核。

@@ -5778,7 +5778,8 @@ final class TraceSnapshotLifecycleTests: XCTestCase {
 final class RecordInputAssistanceSnapshotTests: XCTestCase {
     func testDeferredQuickNotesKeepRecommendationAndHistoricalPoolIdentical() {
         let calendar = Calendar.current
-        let reference = calendar.date(bySettingHour: 18, minute: 43, second: 0, of: Date())!
+        let fixedDay = DateComponents(calendar: calendar, year: 2026, month: 10, day: 9).date!
+        let reference = calendar.date(bySettingHour: 18, minute: 43, second: 0, of: fixedDay)!
         let dates = (1...60).compactMap { calendar.date(byAdding: .day, value: -$0, to: reference) }
             .filter { RecordCalendarContext.dayKind(for: $0) == RecordCalendarContext.dayKind(for: reference) }
             .prefix(8)
