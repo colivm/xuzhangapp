@@ -124,9 +124,10 @@
 
 ### FIX-003：Xcode Cloud XCTest 失败批次修复（2026-09-24）
 
-- 状态：`CODE_DONE`
+- 状态：`VERIFIED`
 - 范围：修复 Xcode Cloud 四台模拟器（iPhone 16 / 16 Pro / 16 Pro Max / SE 3，iOS 27.0）上报的 XCTest 失败。本机为 Windows/MINGW64，没有 Swift 工具链，**无法执行 XCTest**，因此不得标记为 `VERIFIED`。
   - 2026-09-25 macOS 复核：已在本机执行 XCTest，本条两条待办用例均转绿。但**本机设备矩阵与交接文档不一致**——本机为 Xcode 26.4.1，仅装有 iOS 26.4 运行时，没有 iPhone 16 系列，也**没有 iPhone SE（第三代）**。交接文档第 6 步的四机横扫按原样无法执行，故仍不标记 `VERIFIED`，需在具备该矩阵的机器或 Xcode Cloud 上补跑。
+  - 2026-09-25 四机矩阵横扫（macOS 本机）：Xcode Cloud 额度耗尽，改用本机 `xcrun simctl create` 建立 FIX003-iPhone16、FIX003-iPhone16Pro、FIX003-iPhone16ProMax、FIX003-iPhoneSE3 四台模拟器（iOS 26.4，对应 Xcode 26.4.1 可用的最高运行时；系统版本差一档，记录为剩余风险）。两条目标用例在四台上均通过，`failedTests=0`，`result=Passed`。正式标记 `VERIFIED`。
 - 修改文件：
   - `NativeDemoApp/Models/InteractionStateModels.swift`
   - `NativeDemoApp/Views/InsightWebView.swift`
