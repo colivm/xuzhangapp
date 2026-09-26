@@ -6231,3 +6231,28 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 剩余风险：同套件内若还有其他用例使用 `Date()`，仍可能在特定运行日漂移。本轮只按 FIX-005 范围修正第 5781 行这一处，未横扫排查，留作后续独立任务。
 - 下一任务：FIX-004、FIX-005 均已 `VERIFIED`。`RELEASE-02` 继续 `BLOCKED`，剩余风险仍为 Xcode Cloud 全量 Test action、Debug/Release Archive、device-audit、Instruments 与封版真机证据未闭环。
 - 状态与剩余风险：本节源码为 `CODE_DONE`；`RELEASE-02` 继续 `BLOCKED`。附件中其他 LifeNarrative、Discover、输入辅助和 IAP 失败尚未证明是独立产品缺陷，需在串行且确认 commit 的新日志中复核。
+
+### 214. FIX-006-SEMANTIC-CATEGORY-COLLISION：收口类目词与关键词表碰撞这一类缺陷（2026-09-26）
+
+- 状态：`VERIFIED`
+- 任务编号说明：`FIX-001`~`FIX-011` 在本台账早期已全部占用，本节沿用第 212/213 节的递增节号序列，任务名加后缀区分，不复用旧 `FIX-006` 任务号（第 2418 行「单类语义主题的结果总览指标」）。
+- 缺陷类型：`LifeMarkService.semanticText(for:)` 会把 `item.category.rawValue` 与 `item.category.label` 拼入用于关键词匹配的文本。只要某个 definition 关键词或语义守卫关键词恰好等于类目词，该类目下的**所有**条目就会仅凭类目无条件命中（false positive）或被守卫无条件误杀（false negative），与用户实际买了什么无关。
+- 全库碰撞普查（类目词共 12 个：餐饮/吃饭、交通/出行、购物、日用、娱乐、住宿、健康、居家、人情、其他）：
+  1. `daily_supply` keywords 含「日用」← `.daily`：已由第 1572-1575 行早期守卫改用 `dailySupplyEvidenceText` 防御，**本节前已修**。
+  2. `householdCleaningKeywords` 含「日用」← `.daily`，经 `matches()` 第 1586 行：**第 212 节（FIX-004）已修**。
+  3. 同上关键词，经 `isHouseholdCleaningSupply(_ item:)` 第 1648 行：**本节修复**。
+  4. `travel` keywords 含「住宿」← `.lodging`：**本节修复**。
+  5. `leisure` keywords 含「娱乐」← `.entertainment`：**本节按产品意图显式化**。
+- 修复范围（`NativeDemoApp/Services/LifeMarkService.swift`）：
+  1. 第 1648 行 `isHouseholdCleaningSupply(_ item:)` 由 `semanticText(for:)` 改为 `dailySupplyEvidenceText(for:)`。原缺陷：一条 `.daily` 类目条目若靠 context+object 关键词合法匹配上 baby supply、但不含 strong 关键词（尿不湿/奶瓶等），`babySupplyLabel` 第 1782 行会因类目词「日用」命中守卫而把标签降级成「日用补货」。标记本身已建出，只是标签错。
+  2. `travel` 定义（第 749 行）keywords 摘掉「住宿」。
+  3. **`matchesDefinitionKeyword` 第 818 行 `case "travel"` 内另有一份硬编码关键词表，同样含「住宿」，完全绕过 `definition.keywords`。** 仅改定义不生效，必须同步摘除——这一处是运行测试后才暴露的，是本节最容易漏的点。
+  4. `leisure` 定义（第 738-742 行）keywords 摘掉「娱乐」，并把 `requiresKeywordMatch` 由 `true` 改为 `false`。产品意图经用户确认为「凡娱乐类目、无更具体子定义者统统打 leisure」（意图 A）。因第 1609 行在 `requiresKeywordMatch == false` 时走 `categoryMatched || keywordMatched`，`.entertainment` 仍然命中，**运行行为不变**，但意图由「靠类目词碰巧生效」变为显式声明。
+- 新增回归测试（`NativeDemoAppTests/StateRegressionTests.swift`，`LifeMarkFactAuthorityTests`）：`testNeutralTitleNeverCreatesFactsFromCategoryWordAlone`。因 `definitions` 与 `matches(_:definitionID:)` 均为 `private`（`@testable` 亦不可见），不新增测试专用出口，改为走公开入口 `LifeMarkService.aggregates` 做行为断言：遍历 `Category.allCases`，用中性标题「记录一笔」构造条目，断言不产生任何标记。行为断言比遍历关键词表更结实——不论后续谁改关键词、加守卫或改匹配逻辑，重现该模式即刻失败。唯一豁免 `leisure` 及其 `milestone`/`streak` 派生聚合（意图 A 的预期行为，非缺陷）。
+- 冻结边界：未修改 `semanticText`、`dailySupplyEvidenceText`、`householdCleaningKeywords` 或 `SemanticBoundaryGuard` 任何关键词表；未触碰 `baby_supply`/`pet_supply`/`groceries`/`daily_supply` 的匹配分支；未改 `broadLeisureSpecificDefinitionIDs`、`broadDailySupplySpecificDefinitionIDs`；未新增 definition；未重构 `matches()`。新增 `live_event`（大型演出专名标记）属独立任务，不在本节。
+- 验证证据：2026-09-26 本机 iPhone 16 Pro 模拟器（iOS 26.4）。第一轮 34 条中新测试捕获 2 处失败：`.entertainment` 命中 `leisure`（测试豁免缺失，已修正断言）、`.lodging` 命中 `away_travel`（暴露上述第 818 行硬编码表，已修复生产代码）。修正后第二轮 `LifeMarkFactAuthorityTests`、`InsuranceClassificationBoundaryTests`、`RecordSemanticDiningBoundaryTests`、`LifeJourneyFactRegressionTests`、`AICommandTrustedSemanticFacetTests` 共 34 条全通过；第三轮扩面 `RecordRecommendationConsistencyTests`、`LifeNarrativeSignalPolicyTests`、`LifeNarrativeEchoPolicyTests`、`TrustedUserMomentNarrativeTests`、`TodayPlaybackContentSnapshotTests`、`DiscoverEditorialPolicyTests`、`RecordEmotionScenePolicyTests`、`SummaryPlaybackSceneLifecyclePolicyTests` 共 119 条全通过。合计 153 条，`0 failures`，`** TEST SUCCEEDED **`。
+- 剩余风险：
+  1. 本轮改动了 `travel` 与 `leisure` 的实际匹配行为（不只是防御性修正），扩面已覆盖叙事/播放/发现/推荐八个套件，但**未执行 `NativeDemoAppTests` 全量套件**，全量回归仍需 Xcode Cloud 串行 Test action 确认。
+  2. `matchesDefinitionKeyword` 中 `learning_growth`、`fitness`、`baby_supply`、`travel` 四个 `case` 都存在与 `definition.keywords` 并行的硬编码词表/守卫调用，属于关键词真值来源分裂。本节只摘除 `travel` 那一处的类目词，未统一真值来源，留作后续独立任务。
+  3. 新测试用单条中性条目断言，不覆盖多条目聚合、`minimumCount > 1` 或 `memoryContext` 非空时的组合路径。
+- 下一任务：`live_event` 大型演出专名标记（用户已确认：进 `broadLeisureSpecificDefinitionIDs` 使其与 `movie_ticket` 对称、只打专名标记不重复打 leisure；关键词表收窄，砍掉「体育馆」以免误伤健身消费）。`RELEASE-02` 继续 `BLOCKED`，剩余风险仍为 Xcode Cloud 全量 Test action、Debug/Release Archive、device-audit、Instruments 与封版真机证据未闭环。

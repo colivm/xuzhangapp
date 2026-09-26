@@ -7601,6 +7601,41 @@ final class LifeMarkFactAuthorityTests: XCTestCase {
         ))!
     }
 
+    func testNeutralTitleNeverCreatesFactsFromCategoryWordAlone() {
+        // semanticText 会把 category.rawValue 与 category.label 拼进关键词匹配文本。
+        // 若某个 definition 关键词或语义守卫关键词恰好等于类目词，该类目下的所有条目
+        // 都会仅凭类目无条件命中（false positive）或被守卫无条件误杀（false negative）。
+        // 中性标题不含任何 definition 关键词，因此任何类目都不应产生标记。
+        //
+        // 唯一豁免：leisure 按产品意图对整个 .entertainment 类目兜底（requiresKeywordMatch
+        // 为 false 是显式声明的，不依赖类目词碰撞），因此娱乐类目允许且只允许出现
+        // leisure 及其派生的 milestone/streak 聚合。
+        let leisureExempt: Set<String> = ["leisure"]
+        for category in HomeItem.Category.allCases {
+            let neutral = HomeItem(
+                title: "记录一笔",
+                amount: 50,
+                category: category,
+                createdAt: date(20, hour: 18),
+                userEditedTitle: true
+            )
+            let marks = LifeMarkService.aggregates(
+                for: [neutral],
+                allItems: [neutral],
+                isMember: true,
+                limit: 12
+            )
+            let unexpected = marks.filter { mark in
+                guard category == .entertainment else { return true }
+                return !leisureExempt.contains(where: { mark.id == $0 || mark.id.hasPrefix("\($0)_") })
+            }
+            XCTAssertTrue(
+                unexpected.isEmpty,
+                "\(category.rawValue) 类目的中性标题仅凭类目词命中了 \(unexpected.map(\.id))"
+            )
+        }
+    }
+
     func testGeneratedDisplayCopyDoesNotCreateGroceryOrSocialFacts() {
         let generatedSupply = HomeItem(
             title: "日用记录",

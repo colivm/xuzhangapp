@@ -735,18 +735,18 @@ enum LifeMarkService {
             label: "休闲娱乐",
             category: .entertainment,
             categories: [.entertainment],
-            keywords: ["娱乐", "休闲", "电影", "影院", "网吧", "网咖", "上网费", "直播打赏", "主播打赏", "抖音打赏", "直播礼物", "动物园", "游乐场", "乐园", "主题乐园", "迪士尼", "环球影城", "海洋馆", "水族馆", "公园", "景区", "景点", "展览", "看展", "展馆", "博物馆", "美术馆", "演唱会", "音乐节", "剧场", "话剧", "脱口秀", "密室", "剧本杀", "桌游", "台球", "ktv", "唱歌", "游戏", "门票"],
+            keywords: ["休闲", "电影", "影院", "网吧", "网咖", "上网费", "直播打赏", "主播打赏", "抖音打赏", "直播礼物", "动物园", "游乐场", "乐园", "主题乐园", "迪士尼", "环球影城", "海洋馆", "水族馆", "公园", "景区", "景点", "展览", "看展", "展馆", "博物馆", "美术馆", "演唱会", "音乐节", "剧场", "话剧", "脱口秀", "密室", "剧本杀", "桌游", "台球", "ktv", "唱歌", "游戏", "门票"],
             access: .free,
             priority: 24,
             minimumCount: 1,
-            requiresKeywordMatch: true
+            requiresKeywordMatch: false
         ),
         LifeMarkDefinition(
             id: "travel",
             label: "出去玩订酒店买票",
             category: .transport,
             categories: [.transport, .lodging, .entertainment, .dining, .shopping],
-            keywords: ["旅行", "旅游", "异地", "外地", "出差", "酒店", "民宿", "住宿", "机票", "机场", "高铁", "火车", "车站", "景区", "景点", "门票", "返程", "行程", "伴手礼"],
+            keywords: ["旅行", "旅游", "异地", "外地", "出差", "酒店", "民宿", "机票", "机场", "高铁", "火车", "车站", "景区", "景点", "门票", "返程", "行程", "伴手礼"],
             access: .member,
             priority: 14,
             minimumCount: 1,
@@ -815,7 +815,7 @@ enum LifeMarkService {
             return SemanticBoundaryGuard.matchesBabySupply(normalized)
         case "travel":
             return SemanticBoundaryGuard.matchesLongDistanceTransit(normalized)
-                || containsAny(normalized, ["旅行", "旅游", "异地", "外地", "出差", "酒店", "民宿", "住宿", "景区", "返程", "行程"])
+                || containsAny(normalized, ["旅行", "旅游", "异地", "外地", "出差", "酒店", "民宿", "景区", "返程", "行程"])
         default:
             return containsAny(normalized, definition.keywords)
         }
@@ -1645,7 +1645,7 @@ enum LifeMarkService {
     }
 
     private static func isHouseholdCleaningSupply(_ item: HomeItem) -> Bool {
-        SemanticBoundaryGuard.isHouseholdCleaningSupply(semanticText(for: item))
+        SemanticBoundaryGuard.isHouseholdCleaningSupply(dailySupplyEvidenceText(for: item))
     }
 
     private static func matches(_ item: HomeItem, definitionID: String) -> Bool {
