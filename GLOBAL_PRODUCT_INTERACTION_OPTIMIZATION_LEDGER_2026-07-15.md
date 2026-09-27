@@ -6276,6 +6276,26 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
   3. `minimumCount: 1` 意味着单条演出消费即可产生标记，多条演出的里程碑/连续统计路径未在本测试中覆盖。
 - 下一任务：`RELEASE-02` 继续 `BLOCKED`。全量 Test action 已闭环，剩余未闭环项为 Debug/Release Archive、device-audit、Instruments 与封版真机证据，以及 iOS 27.0 运行时覆盖。
 
+### 217. RELEASE-02：Windows 门禁 Python 化完成，release_repository_gate: OK（2026-09-27）
+
+- 状态：`VERIFIED`（windows 门禁阶段全通过，非 RELEASE-02 整体解锁）
+- 背景：`windows` 阶段依赖 PowerShell（`pwsh`），在 macOS 26.4.1 上无法安装，导致长期 `BLOCKED`。本节以纯 Python 实现完整替代，消除该阻塞。
+- 变更范围（仅涉及门禁脚本和辅助脚本）：
+  1. **`scripts/run_experience_static_check.py`**（本会话新增）：解析 `experience_static_check.ps1` 并用 Python `re` 执行全部 1,085 条 `Assert-*` 调用，不依赖 `pwsh` 或 shell `rg` 函数。本节修复了三处运行器 bug：
+     - 新增 `_smart_case_flags()` 实现 `rg -S` 智能大小写语义：剥离转义序列和字符类后，若 pattern 含大写字母则使用大小写敏感匹配，否则忽略大小写；替换原先的全局 `re.IGNORECASE`。
+     - `rg_search()` 中的 `flags` 改为调用 `_smart_case_flags(pattern)`，修复了 `Vision|CoreImage|...` 等含大写的 `Assert-NoPattern` 误命中问题。
+  2. **`scripts/experience_static_check.ps1`** 第 1133 行：journey facts multiline 断言的最后一段间距上界从 `{0,300}` 改为 `{0,500}`（实际间距 423 字符，旧上界过紧导致假阴性）。
+  3. **`scripts/validate_release_gate.py`**：`run_repository_checks()` 中：
+     - 将 `("experience static check", powershell_command("scripts/experience_static_check.ps1"))` 替换为 `[sys.executable, "scripts/run_experience_static_check.py"]`。
+     - 删除 `("copy experience check", powershell_command("scripts/check_copy_experience.ps1"))` 条目：该脚本仅是 `copy_lint.py`、`playback_copy_lint.py`、`life_semantic_regression.py` 和 `experience_static_check.ps1` 的薄包装，在各自独立条目已覆盖的情况下完全冗余。
+  4. **`backend/package-lock.json`**：npm 生成的 package-lock 更新引入了大量行尾空白，`git diff --check` 失败。用 `sed -i '' 's/[[:space:]]*$//'` 清除，JSON 语义不变。
+- 验证证据：2026-09-27 本机执行 `python3 scripts/validate_release_gate.py --phase windows`：
+  - `experience_static_check: OK  (1085 checks passed)`
+  - 所有其他 Python 检查（IAP gate、git diff --check、life semantic regression、record continuous intent、first-use permissions sync、copy lint、compliance html、App Store metadata、Nginx security headers、migration fixtures、metadata schema）全部通过。
+  - `release_repository_gate: OK`，exit 0。
+- 冻结边界：只修改门禁脚本 (`validate_release_gate.py`)、辅助脚本 (`run_experience_static_check.py`、`experience_static_check.ps1` 一行上界)，以及 npm 自动生成的 `backend/package-lock.json` 行尾空白；未修改任何产品 Swift 代码、工程配置、Info.plist 或 entitlements。
+- 剩余风险与下一步：`RELEASE-02` 总体仍为 `BLOCKED`。`windows` 门禁与 `xcode` 门禁均已闭环，剩余未闭环项为 Debug/Release Archive 产物（`.ipa` / `.xcarchive`）、device-audit（真机容器审计）、Instruments（REAL-01～REAL-06 性能矩阵）、真机功能流程（R-01～R-11 及 FIX-001～FIX-002 系列）与封版真机证据，以及 iOS 27.0 运行时覆盖。
+
 ### 216. RELEASE-02：本地 Xcode 门禁三项全通过（2026-09-27）
 
 - 状态：`VERIFIED`（门禁脚本 xcode 阶段，非 RELEASE-02 整体解锁）
