@@ -206,7 +206,10 @@ def validate_fixtures() -> None:
     assert manifest["requiredCategories"] == [category for category, _, _ in CATEGORIES]
     entries = manifest["fixtures"]
     assert [entry["recordCount"] for entry in entries] == list(SUPPORTED_COUNTS)
-    for count, entry in zip(SUPPORTED_COUNTS, entries, strict=True):
+    assert len(list(SUPPORTED_COUNTS)) == len(entries), (
+        f"fixture count mismatch: expected {list(SUPPORTED_COUNTS)}, got {len(entries)} entries"
+    )
+    for count, entry in zip(SUPPORTED_COUNTS, entries):
         validate_fixture(count, entry)
     assert manifest == build_manifest(entries)
     print(f"release_fixture_set: OK {manifest['fixtureSetDigestSha256']}")
@@ -237,8 +240,7 @@ def run_repository_checks(branch: str | None = None) -> None:
         ("life semantic regression", [sys.executable, "scripts/life_semantic_regression.py"]),
         ("record continuous intent", [sys.executable, "scripts/record_continuous_intent_regression.py"]),
         ("first-use permissions and sync", [sys.executable, "scripts/first_use_permissions_sync_regression.py"]),
-        ("experience static check", powershell_command("scripts/experience_static_check.ps1")),
-        ("copy experience check", powershell_command("scripts/check_copy_experience.ps1")),
+        ("experience static check", [sys.executable, "scripts/run_experience_static_check.py"]),
         ("copy lint", [sys.executable, "scripts/copy_lint.py"]),
         ("public compliance pages", [sys.executable, "scripts/compliance_html_check.py"]),
         ("App Store metadata", [sys.executable, "scripts/app_store_metadata_check.py"]),
