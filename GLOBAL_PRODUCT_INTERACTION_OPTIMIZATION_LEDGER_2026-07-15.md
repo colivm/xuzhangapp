@@ -6256,3 +6256,22 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
   2. `matchesDefinitionKeyword` 中 `learning_growth`、`fitness`、`baby_supply`、`travel` 四个 `case` 都存在与 `definition.keywords` 并行的硬编码词表/守卫调用，属于关键词真值来源分裂。本节只摘除 `travel` 那一处的类目词，未统一真值来源，留作后续独立任务。
   3. 新测试用单条中性条目断言，不覆盖多条目聚合、`minimumCount > 1` 或 `memoryContext` 非空时的组合路径。
 - 下一任务：`live_event` 大型演出专名标记（用户已确认：进 `broadLeisureSpecificDefinitionIDs` 使其与 `movie_ticket` 对称、只打专名标记不重复打 leisure；关键词表收窄，砍掉「体育馆」以免误伤健身消费）。`RELEASE-02` 继续 `BLOCKED`，剩余风险仍为 Xcode Cloud 全量 Test action、Debug/Release Archive、device-audit、Instruments 与封版真机证据未闭环。
+
+### 215. FIX-007-LIVE-EVENT：新增 live_event 大型演出专名标记（2026-09-27）
+
+- 状态：`VERIFIED`
+- 背景：用户在第 214 节（FIX-006）确认了意图 A（`.entertainment` 类目兜底 `leisure`），并追加高价值线索需求：参照 `travel` 对一趟旅程的聚合方式，演唱会/音乐剧等大型演出也要单独列出，不淹没在 `leisure` 里。
+- 产品决策：不含「体育馆」。「体育馆」是场地类型词而非节目类型词，其下的「羽毛球场地费」「游泳馆月卡」「健身课程」在 `.entertainment` 类目中极常见，均无演出语义；真正的演出消费（首都体育馆演唱会等）标题里几乎必然同时出现演唱会/音乐节等节目词，「体育馆」是冗余且危险的信号。
+- 修复范围（`NativeDemoApp/Services/LifeMarkService.swift`）：
+  1. 第 543-551 行 `broadLeisureSpecificDefinitionIDs` 新增 `"live_event"`，与 `"movie_ticket"` 对称：命中 `live_event` 的条目只携带专名标记，不再同时产生 `leisure`。
+  2. 第 733 行（原 `leisure` 前）插入新 `LifeMarkDefinition`：id `live_event`，label `"看演出"`，categories `[.entertainment]`，priority `9`（紧随 `movie_ticket` 的 `8`，两者均先于 `leisure` 的 `24`），`requiresKeywordMatch: true`，关键词：演唱会/音乐节/livehouse/live house/话剧/舞台剧/音乐剧/歌剧/脱口秀/相声/演奏会/音乐会/大剧院/剧院/鸟巢/梅奔/红磡。
+- 新增回归测试（`NativeDemoAppTests/StateRegressionTests.swift`，`LifeMarkFactAuthorityTests`）：`testLiveEventKeywordsProduceLiveEventNotLeisure`。仅放确实命中 live_event 的条目（演唱会门票、音乐剧），断言产生 `live_event` 且批次内无 `leisure`（`broadLeisureSpecificDefinitionIDs` 的逐条目抑制逻辑在批次内所有条目均命中专名标记时使 `leisure.matchedItems` 为空）。注释说明了不掺入中性条目的理由，避免后续误读。
+- 冻结边界：未修改 `matchesDefinitionKeyword`（`live_event` 走 `default` 分支，无需新 case）；未修改 `leisure` 定义；未触碰其他 definition、守卫、聚合逻辑或任何其他套件。
+- 验证证据：2026-09-27 本机 iPhone 16 Pro 模拟器（iOS 26.4，UDID `E5EB237D-8FC3-4F0A-9679-08AA30B50F59`，事后已删除）。第一轮 `LifeMarkFactAuthorityTests` 6 条：新测试首跑失败（中性条目掺入导致 `leisure` 合法出现，测试设计问题，非产品缺陷），修正测试断言后重跑 6 条全通过。第二轮扩面 8 个套件（`LifeMarkFactAuthorityTests`、`InsuranceClassificationBoundaryTests`、`RecordSemanticDiningBoundaryTests`、`LifeJourneyFactRegressionTests`、`AICommandTrustedSemanticFacetTests`、`RecordRecommendationConsistencyTests`、`LifeNarrativeSignalPolicyTests`、`LifeNarrativeEchoPolicyTests`），`** TEST SUCCEEDED **`，0 failures。
+- 全量回归证据（2026-09-27，补跑，覆盖第 212/213/214/215 节全部改动）：本机 iPhone 16 Pro 模拟器（iOS 26.4，UDID `E0D6D87B-FCF8-437E-AF6C-C98DF3A13ECC`，事后已删除）执行 `xcodebuild test -only-testing:NativeDemoAppTests`，**`Executed 624 tests, with 0 failures (0 unexpected) in 960.723 seconds`，`** TEST SUCCEEDED **`**。日志中大量 `CHHapticPattern.mm:487 ... hapticpatternlibrary.plist` 报错为模拟器缺省触觉资源的环境噪音，非用例失败（无任何 `Test Case ... failed` 行）。
+- 台账勘误：第 212、213、214 节及本节早前版本均记「未执行全量套件，留待 Xcode Cloud 串行 Test action」。该表述继承自更早的 Windows 环境记录（无 Xcode，确实无法本地执行 XCTest），在当前 macOS + Xcode 26.4.1 环境下已失效——`xcodebuild test` 即为同一个 Test action，本地与云端执行同一套用例。上述 624 条全量结果即为闭环证据，不再需要 Xcode Cloud 复跑来确认全量回归。
+- 剩余风险：
+  1. 运行时矩阵覆盖不全：本机仅有 iOS 26.4 runtime，iOS 27.0 runtime 在当前 Xcode 无法安装，跨大版本运行时行为差异未验证。这是运行时覆盖缺口，与「能否本地执行 Test action」无关。
+  2. `live_event` 的场馆词（鸟巢/梅奔/红磡）同样是场地类型词，有小概率误伤体育赛事消费；考虑到这三个场馆在中文消费记录中与演出的关联度远高于体育，暂接受该风险，后续如发现误伤再收窄。
+  3. `minimumCount: 1` 意味着单条演出消费即可产生标记，多条演出的里程碑/连续统计路径未在本测试中覆盖。
+- 下一任务：`RELEASE-02` 继续 `BLOCKED`。全量 Test action 已闭环，剩余未闭环项为 Debug/Release Archive、device-audit、Instruments 与封版真机证据，以及 iOS 27.0 运行时覆盖。
