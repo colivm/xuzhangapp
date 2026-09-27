@@ -359,8 +359,10 @@ def run_xcode_checks(destination: str) -> None:
     if sys.platform != "darwin" or not shutil.which("xcodebuild"):
         raise SystemExit("Xcode gate requires macOS with xcodebuild installed")
     base = ["xcodebuild", "-project", "NativeDemoApp.xcodeproj", "-scheme", "NativeDemoApp"]
-    run_command("Xcode Debug build", base + ["-configuration", "Debug", "build"])
-    run_command("Xcode Release build", base + ["-configuration", "Release", "build"])
+    # 三个步骤都必须显式指定 destination。否则 xcodebuild 会自动挑选第一个匹配目标，
+    # 在装有 Mac 版 App 的机器上会选中 "My Mac"，进而要求 provisioning profile 覆盖该 Mac 而失败。
+    run_command("Xcode Debug build", base + ["-configuration", "Debug", "-destination", destination, "build"])
+    run_command("Xcode Release build", base + ["-configuration", "Release", "-destination", destination, "build"])
     run_command("XCTest", base + ["-destination", destination, "test"])
     print("\nrelease_xcode_gate: OK")
 
