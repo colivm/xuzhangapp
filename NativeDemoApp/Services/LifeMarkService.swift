@@ -545,6 +545,7 @@ enum LifeMarkService {
         "digital_subscription",
         "social_care",
         "movie_ticket",
+        "live_event",
         "travel",
         "interest_gear",
         "learning_growth"
@@ -727,6 +728,17 @@ enum LifeMarkService {
             keywords: ["电影票", "买电影票", "看电影", "观影", "票根", "电影", "影院", "电影院", "影城", "万达影城", "CGV", "IMAX", "卢米埃", "幸福蓝海", "横店影视", "金逸影城", "奥斯卡", "中影", "SFC", "上影", "博纳"],
             access: .free,
             priority: 8,
+            minimumCount: 1,
+            requiresKeywordMatch: true
+        ),
+        LifeMarkDefinition(
+            id: "live_event",
+            label: "看演出",
+            category: .entertainment,
+            categories: [.entertainment],
+            keywords: ["演唱会", "音乐节", "livehouse", "live house", "话剧", "舞台剧", "音乐剧", "歌剧", "脱口秀", "相声", "演奏会", "音乐会", "大剧院", "剧院", "鸟巢", "梅奔", "红磡"],
+            access: .free,
+            priority: 9,
             minimumCount: 1,
             requiresKeywordMatch: true
         ),

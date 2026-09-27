@@ -7699,6 +7699,41 @@ final class LifeMarkFactAuthorityTests: XCTestCase {
         XCTAssertEqual(LifeSceneSemanticService.classify(commute).kind, .commute)
     }
 
+    func testLiveEventKeywordsProduceLiveEventNotLeisure() {
+        // broadLeisureSpecificDefinitionIDs 的抑制逻辑是逐条目的：对于匹配 live_event 的
+        // 条目，matches(_:leisure) 会因检测到特定标记而返回 false，leisure 的 matchedItems
+        // 为空时不会生成聚合。
+        // 因此本测试只放确实命中 live_event 的条目，不掺入中性条目（中性条目合法产生
+        // leisure，会干扰断言）。
+        let concert = HomeItem(
+            title: "演唱会门票",
+            amount: 680,
+            category: .entertainment,
+            createdAt: date(20, hour: 19)
+        )
+        let musical = HomeItem(
+            title: "音乐剧 猫",
+            amount: 480,
+            category: .entertainment,
+            createdAt: date(21, hour: 19)
+        )
+
+        let marks = LifeMarkService.aggregates(
+            for: [concert, musical],
+            allItems: [concert, musical],
+            isMember: true,
+            limit: 12
+        )
+
+        // 演唱会和音乐剧条目应产生 live_event
+        XCTAssertTrue(marks.contains { $0.id == "live_event" },
+                      "含演唱会/音乐剧关键词的条目未产生 live_event 标记")
+
+        // 批次内所有条目均命中 live_event，leisure 的 matchedItems 为空，不应生成 leisure 聚合
+        XCTAssertFalse(marks.contains { $0.id == "leisure" },
+                       "所有条目均命中 live_event 后 leisure 仍然出现，broadLeisureSpecificDefinitionIDs 排除失效")
+    }
+
     func testOCRTransitRouteUsesWorkdayHistoryInsteadOfExactAmount() {
         let history = [20, 21].map { day in
             HomeItem(
