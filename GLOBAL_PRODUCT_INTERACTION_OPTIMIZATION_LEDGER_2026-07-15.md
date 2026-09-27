@@ -6275,3 +6275,16 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
   2. `live_event` 的场馆词（鸟巢/梅奔/红磡）同样是场地类型词，有小概率误伤体育赛事消费；考虑到这三个场馆在中文消费记录中与演出的关联度远高于体育，暂接受该风险，后续如发现误伤再收窄。
   3. `minimumCount: 1` 意味着单条演出消费即可产生标记，多条演出的里程碑/连续统计路径未在本测试中覆盖。
 - 下一任务：`RELEASE-02` 继续 `BLOCKED`。全量 Test action 已闭环，剩余未闭环项为 Debug/Release Archive、device-audit、Instruments 与封版真机证据，以及 iOS 27.0 运行时覆盖。
+
+### 216. RELEASE-02：本地 Xcode 门禁三项全通过（2026-09-27）
+
+- 状态：`VERIFIED`（门禁脚本 xcode 阶段，非 RELEASE-02 整体解锁）
+- 背景：`RELEASE-02` 的「Debug build + Release build + XCTest」三项在早期记录中标注为「留待 Xcode Cloud，本地无法执行」。该表述继承自 Windows 环境，在当前 macOS + Xcode 26.4.1 环境下已失效。本节在本机完整执行 `scripts/validate_release_gate.py --phase xcode`，三项全通过。
+- 脚本缺陷修复（`scripts/validate_release_gate.py`）：`run_xcode_checks()` 第 362-363 行的 Debug 和 Release build 步骤未传 `-destination` 参数，`xcodebuild` 自动选中第一个匹配目标。在本机（装有 Mac 版 App）这是「My Mac」，进而要求 provisioning profile 覆盖该 Mac，exit 65 失败。XCTest 步骤（第 364 行）一直都有 `-destination`，只有两个 build 步骤缺失。修复：两个 build 步骤补齐相同的 `-destination` 参数，并加注释说明原因。修复后首轮直接通过，未改动任何产品代码。
+- 验证证据：2026-09-27 本机 iPhone 15 模拟器（iOS 26.4，UDID `88868439-D522-4287-8FF0-73EFB57D11C6`，事后已删除）：
+  - `Xcode Debug build: ** BUILD SUCCEEDED **`
+  - `Xcode Release build: ** BUILD SUCCEEDED **`
+  - `XCTest: ** TEST SUCCEEDED **`（624 条，0 failures）
+  - `release_xcode_gate: OK, exit 0`
+- 冻结边界：只修改门禁脚本 `scripts/validate_release_gate.py` 中两处缺失 `-destination` 的 build 步骤；未修改任何产品 Swift 代码、工程配置、Info.plist、entitlements 或其他脚本。
+- 剩余风险与下一步：`RELEASE-02` 总体仍为 `BLOCKED`，xcode 门禁三项已闭环，剩余未闭环项为 Debug/Release Archive 产物（`.ipa` / `.xcarchive`）、device-audit（真机容器审计）、Instruments（REAL-01～REAL-06 性能矩阵）、真机功能流程（R-01～R-11 及 FIX-001～FIX-002 系列）与封版真机证据，以及 iOS 27.0 运行时覆盖。
