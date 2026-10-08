@@ -6364,6 +6364,18 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 冻结边界：本节仅更新台账；未修改代码、Scheme、CI 脚本、配置、证书或分支；未提交、未推送、未部署。根目录新出现的未跟踪空壳 `package-lock.json`（`packages: {}`）未处理、不得提交。
 - 剩余风险与下一步：`RELEASE-02` 总体仍为 `BLOCKED`。剩余：Release Archive 产物与 build 号确认、TestFlight 包安装、device-audit、Instruments REAL-01～REAL-06、真机 R-01～R-11 与 FIX-001/FIX-002 系列、iOS 27.0 运行时覆盖；`APPLE_JWS_ONLINE_CHECKS` 取值与线上部署版本核实仍待用户决定。下一项：用该 workflow 的 Archive（或 TestFlight 分发）产出 `d574713` 的可安装包，再在 iPhone 上执行真机矩阵。
 
+### 220. RELEASE-02：测试分支同步进生产分支，生产门禁通过（2026-10-08）
+
+- 状态：`CODE_DONE`（仓库同步与 Windows 生产门禁完成；Xcode Cloud、Archive 与审核包签收待执行，`RELEASE-02` 总体仍 `BLOCKED`）
+- 背景：App Review 以 Guideline 2.1(a) 拒绝 `1.0 (405)`（2026-09-23，iPad Air 11-inch M3 / iPadOS 27.0，点「验证并登录」后停在登录页），被拒包来自 `xuzhang1.0-release-2026@77b90a3`。用户已在生产服务器重新配置审核登录（`REVIEW_LOGIN_*`），要求把测试分支代码同步到生产分支用于重新提交，并遵守生产门禁。
+- 范围：以 `--no-ff` 将 `feature/xuzhangapp-staging`（含 `d574713` 与第 218/219 节 `b18043e`）合并进 `xuzhang1.0-release-2026`（基线 `5345c84`）。带入 FIX-003～FIX-007、Xcode Cloud prebuild/XCTest 修复与门禁 Python 化。
+- 冲突：仅 `RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md` 1 处（两侧都新增了 8.10 节）。两侧内容全部保留：生产侧「8.10 生产候选基线固定」不变，并加注「已被本次同步取代」；测试侧两节改号为 8.11（IAP 沙盒真机）和 8.12（Xcode Cloud 构建证据）。代码无冲突。
+- 生产隔离核对：`project.pbxproj` 只有 Debug 带 `DEBUG`，任何配置都不含 `STAGING`，门禁输出 `app_branch_configuration: OK branch=xuzhang1.0-release-2026 staging=[]`。新增的 `release_fixtures` 资源只进 `NativeDemoAppTests` 的 Resources 阶段，不进 App 包。`AppSettings.swift`、`Info.plist`（1.0 / 10）、`backend/.env.example`、`.env.staging.example`、`config.js`、`reviewLogin.js`、`iapService.js`、`appleJwsVerifier.js` 相对生产侧均无变化；staging 域名只出现在 `#if STAGING` 分支内。
+- 验证证据（独立 worktree，按 lockfile `npm ci`）：`python scripts/validate_release_gate.py --phase windows --release-branch xuzhang1.0-release-2026` 退出码 0，`release_repository_gate: OK`，只有既有的 7 条文案软提示；后端 `npm test` 全部通过，含审核登录专项、JWS 验签与 153 项 IAP 路由场景。
+- 审核登录说明：被拒时的 `REVIEW_LOGIN_EXPIRES_AT` 为 2026-10-01，审核日 9-23 仍在有效期内，所以过期不是原因；真实原因没有日志可查，用户决定直接重新配置。`IAP_DIAGNOSTICS_*` 只用于支付诊断，与登录无关。客户端还有一个可能导致同样现象的缺陷：登录成功后 `fetchMemberMe` 失败会让整个登录被判为失败（`SettingsViewModel.swift` 的 `verifySMSLogin`）。这个缺陷本次没有修，留作 FIX-008 待用户决定。
+- 冻结边界：未修改产品代码、工程配置、环境模板或后端逻辑，未部署，未操作 App Store Connect。用户主工作区的未跟踪资料与 `RecordView.swift` 的 stat 缓存状态都没动。
+- 剩余风险与下一步：对新的 release HEAD 跑 Xcode Cloud Build、Test 和 Archive，产出新 Build 号；提交前用 TestFlight 生产包按审核备注实际登录一次，并尽量在 iPad 或 iPad 模拟器（iPadOS 27）上验证；`REVIEW_LOGIN_EXPIRES_AT` 必须覆盖整个审核期。Archive、真机矩阵、iOS 27.0 运行时覆盖仍未完成。
+
 ### 221. FIX-008：短信登录成功后会员刷新失败不再回退为登录失败（2026-10-08）
 
 - 状态：`CODE_DONE`（代码与 Windows 门禁完成；Swift 编译、XCTest 与 iPad/iPhone 真机登录待 Xcode Cloud 和真机确认）
