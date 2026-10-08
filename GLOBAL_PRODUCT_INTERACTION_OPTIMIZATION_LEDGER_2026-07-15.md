@@ -5379,6 +5379,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据：本地 `backend npm test` 通过；`python scripts/validate_release_gate.py --phase windows`（含 endpoint 模板门禁，commit `65cefe4`）通过并输出 `release_repository_gate: OK`；远程 `nginx -t`、生产/预发布两个 HTTPS `/health`、8790/8791/8787/8788 进程检查通过；PM2 已 `save`。
 - 冻结边界：未改会员 Product ID、交易归属规则、价格或账单字段；数据库清空与 staging 建库是本次用户明确授权的环境操作。
 - 剩余风险与下一步：当前 Windows 无 Xcode/Swift，尚未生成带 `STAGING` 条件的新 TestFlight 包，也未完成 StoreKit Sandbox/Production 真实购买、恢复、过期、撤销和错环境验单；生产 Apple JWS 签名链校验仍是独立安全缺口。完成 macOS/Xcode 与双环境真机验收前保持 `CODE_DONE`。
+  - **2026-09-28 勘误**：本行「JWS 签名链校验仍是独立安全缺口」已失效。服务端验签在第 180 节（2026-09-18）实现并接入 `iapService.js`，见第 218 节收敛记录。
 
 - 后续配置补充：新增 `ops/nginx/staging-api.xuzhangapp.com.conf`，与生产反代保持 HTTPS、安全响应头和隐藏 Express 标识一致；已同步到服务器并通过 `nginx -t`、staging HTTPS 响应头检查。
 - 门禁补充：`validate_release_gate.py` 现在还检查生产/预发布 `.env` 模板的 endpoint 与 `NODE_ENV` 配对，避免仓库门禁再次对环境配置失明。
@@ -5393,6 +5394,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
   3. 中风险：IAP URL 校验只比较 HTTPS、hostname 和 `/` pathname，未拒绝端口、query/hash 等变体；后续 URL 拼接可能请求非官方 origin。应校验完整 origin。
   4. 中风险：IAP 测试仅覆盖配置 endpoint 配对，未覆盖交易 payload environment、错环境响应、server 启动大小写变体和 URL 变体；生产/预发布 StoreKit 真机验单仍未完成。
   5. 独立安全风险：`iapService.js` 仍只解码 JWS payload，未验证 Apple JWS 签名；本轮未扩大范围修复。
+     - **2026-09-28 勘误**：该缺口已于第 180 节（2026-09-18）关闭。见第 218 节收敛记录。
 - 工作区保护：保留既有 `backend/.env.staging.example` 修改以及未跟踪 `brand-assets/`、`output/`、`tmp/`、截图脚本和缓存文件。
 - 下一步：先修正 Release 配置隔离与 `NODE_ENV` 规范化，再补严格 URL/交易环境回归；完成 macOS/Xcode、StoreKit 双环境和真机验收前，`IAP-PRODUCTION-ROUTE-GATE-FIX-01` 继续保持 `CODE_DONE`。
 
@@ -5408,6 +5410,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
   5. **P2，URL 门禁过宽**：`config.js:65-79` 仅校验协议、hostname、pathname，允许 query/hash/非 443 端口；后续字符串拼接可能请求非官方 origin。应校验完整 origin、端口及无 query/hash。
   6. **P2，内测分支发布误操作风险**：`08878a8` 在 App target Debug 与 Release 都定义 `STAGING`；对该分支归档会生成连 staging 的 Release 包。当前 gate 未检查分支与 Release 配置关系。该设置符合当前 staging 分支意图，但应改为独立 scheme/config 或增加发布门禁。
   7. **独立安全缺口未被本轮修复**：`iapService.js` 仍只 Base64 解码 JWS，未验证 Apple 签名/证书链；生产验单不能仅凭 endpoint 和环境字段宣称安全。
+     - **2026-09-28 勘误**：该缺口已于第 180 节（2026-09-18）关闭，见第 218 节收敛记录。
 - 下一步：先修复备份 fallback、规范化 NODE_ENV、拒绝占位符和严格 URL；为 Production/TestFlight Sandbox 设计签名后路由并完成真实 StoreKit 矩阵，再进行 Xcode/真机签收。`IAP-PRODUCTION-ROUTE-GATE-FIX-01` 维持 `CODE_DONE`。
 
 ### 143. RELEASE-GATE-BACKEND-RISK-FIX-01：发布门禁与后端风险修复（2026-09-16）
@@ -5425,12 +5428,14 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 发布门禁：`validate_release_gate.py` 解析 App target Debug/Release 编译条件；生产分支 `xuzhang1.0-release-2026` 禁止 `STAGING`，预发布分支 `feature/xuzhangapp-staging` 要求 Release 含 `STAGING`；新增 `--release-branch`/CI 分支识别。
 - 验证：`backend/npm test` 通过；`git diff --check` 通过；`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 通过并输出 `release_repository_gate: OK`；`experience_static_check.ps1` 通过。Windows 无 Xcode，Swift/XCTest、真实 StoreKit 和真机验收尚未执行。
 - 剩余风险：Apple JWS 签名链仍未实现；Production 真实购买与 TestFlight/App Review Sandbox 矩阵仍需 macOS/StoreKit 验证；正式发布必须显式使用生产分支并执行 Release gate。
+  - **2026-09-28 勘误**：本行「Apple JWS 签名链仍未实现」已失效，服务端验签于第 180 节（2026-09-18）实现，见第 218 节。Production 真实购买与 Sandbox 矩阵部分仍然有效。
 
 ### 146. RELEASE-CANDIDATE-AUDIT-01：1.0 封版审计（2026-09-16）
 
 - 结论：当前不可标记 `VERIFIED`，仅达到代码与 Windows 门禁完成。
 - 生产分支实审：在干净 worktree 的 `xuzhang1.0-release-2026@bbef83c` 执行 `python scripts/validate_release_gate.py --phase windows --release-branch xuzhang1.0-release-2026` 通过；fixture 100/1000/5000、真实照片、IAP 配置、分支编译条件、语义与静态检查均通过，生产 App target 无 `STAGING`。后端 `npm test` 通过。
 - 封版阻塞：`GATE-00` 仍为 `BLOCKED`；尚无 macOS/Xcode Debug/Release 编译、完整 XCTest、TestFlight/真机、StoreKit Production/Sandbox 购买/恢复/过期/撤销/错环境矩阵、Instruments 性能证据；Apple JWS 签名链仍未实现。多个 `CODE_DONE` 任务尚未外部签收。
+  - **2026-09-28 勘误**：「Apple JWS 签名链仍未实现」已失效（第 180 节实现，见第 218 节）。`GATE-00` 阻塞、真机矩阵、Instruments 等其余各项仍然有效。
 - 工作区：当前 checkout 为 `feature/xuzhangapp-staging`；既有 `.env.staging.example` 修改和未跟踪素材/输出文件均保留。正式封版必须在 `xuzhang1.0-release-2026` 的干净 checkout 执行门禁。
 
 ### 147. DETAIL-IMAGE-LOAD-AUDIT-01：消费详情图片加载慢审查（2026-09-16）
@@ -5761,6 +5766,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 已有证据：staging `784c954`（修复 `4a27e6e`），production `1a3311c`；前次提交快照与生产配置兼容副本各自完整 Windows gate/四专项已通过且日志存在，产品代码此后无变化，本轮复核不重跑。生产仍缺五个修复文件，兼容副本通过不等于生产已交付；最终同步/修复后仍须按真实两套候选分别完整执行，不借历史日志漏检。
 - 当前优先项：先验收首页今日全部纵滚/横滑/删除与瑞幸/三餐情绪切换保存，兼顾金额立即操作、分类锁/明确备注、场景权益、生活印记/奖励、系统深色；然后依原矩阵完成图片、持久化/备份/同步、权限/无障碍及规模性能。每项绑定 commit/Build/设备及证据，不将“基本通过”转写为全量 VERIFIED。
 - 发布阻塞保留：支付 Apple JWS 签名链缺口和真实 StoreKit Production/Sandbox 矩阵未关闭；Windows 无 Xcode/Archive/XCTest/iPhone/Instruments。没有擅自实现支付修复、创建生产提交、发起真实购买或部署；这些需在其原范围内定向安排。
+  - **2026-09-28 勘误**：「支付 Apple JWS 签名链缺口」已由第 180 节（2026-09-18）关闭，见第 218 节。真实 StoreKit 矩阵与 Windows 无 Xcode 部分仍然有效。
 - 验证与保护：`git diff --check`、产品/两套工程与原门禁未改的 diff 核对；用户环境模板与素材/输出/脚本保留。只读核对 Info.plist 两分支为 1.0 (10)，不改版本号；验收仍必须检查实际 Archive，不只依赖源码。
 - 下一步：取得当前修复真机结果；获授权后将确定的修复定向同步生产并固定候选，再逐项关闭支付安全与 Mac/StoreKit/真机证据缺口。个人 AI 池保持 2.0，不因封版检查重启任何新功能。
 
@@ -5842,8 +5848,10 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 剩余风险与下一步：另行授权交付并部署后，用现有 TestFlight 包验证真实 Sandbox 查询、同账号新购买/恢复、错账号拒绝；旧 staging 交易不会自动变成生产账号权益，不能通过清库、换手机号或改绑跳过验证。诊断关闭/到期不影响新路由；账号校验拒绝不触发 Apple 查询失败诊断，旧 iOS 仍可能显示笼统提示，不把无诊断日志当作恢复成功。Production 401 授权原因、JWS 签名链及正式真实扣费验收仍独立待关闭；本次不承诺消除所有订阅错误，不改客户端提示，也不启动订阅迁移任务。
 - 收尾：两个本轮临时副本经绝对父路径、各自基线 HEAD、四文件哈希及变更/忽略白名单核对后移除，可由基线和主工作区补丁重建；仅删除可重建依赖/检查缓存，六份日志、原审计 worktree 和全部用户资料保留。
 - 交付授权（2026-09-18）：用户明确“提交推送，我测试一下”，仅交付上述四个 backend 文件和本节台账，定向同步测试/生产分支；不夹带其他未提交章节、iOS、环境模板、签收文档或素材。获取远端后两分支仍与原完整双环境验证基线一致，本次复用该完整证据并核对提交快照及两套配置，不修改或删减原检查。不得把路由交付写成 Production 鉴权已修复；服务器更新/重启和真实 TestFlight 验收由用户下一步执行，不自动部署或迁移旧测试订阅。
-- 交付及用户真机反馈（2026-09-18）：staging `58e4975`、production `a6f0964` 已定向提交并原子普通推送，远端头一致，五文件范围核对通过；原配置检查再次分别通过，临时交付副本经白名单核验后清理，可重建，原用户资料保留。用户随后恢复购买显示“这笔 App Store 订阅属于另一个叙账账号，请登录购买时的手机号账号恢复”，对应 APP_ACCOUNT_MISMATCH：按当前代码顺序，查询及前置载荷检查已通过，Apple 返回的非空 appAccountToken 与当前服务账号 ID 不同，不再只是诊断布尔值无法区分缺失/不匹配。结合用户确认内测 staging 首次购买，符合旧测试内部账号标识在生产不匹配的情况；不将此表述为另一个真实用户占有，也没有凭该提示识别具体旧账号。此单条反馈验证了该次请求到达归属拒绝路径，不代表当前生产账号购买/恢复成功或 Production 授权 401 关闭。下一步以独立干净的 Sandbox 测试身份在生产业务账号下验证新购买及同账号恢复，保留不迁移/不改绑边界；正式生产授权与签名链风险继续独立保留。状态仍 CODE_DONE，本轮只补验收证据，不改产品、配置或测试，不提交推送或操作服务器。
-- 用户新沙盒购买通过（2026-09-18）：用户在创建并登录 Sandbox 测试账号后反馈“生产安装包订阅成功了”。按本线程此前确认的 TestFlight 安装渠道，记录为生产配置 App＋生产业务后端＋Apple Sandbox 的新购买开通真机通过；结合前述旧测试账号交易被拒，支持路由修复且账号保护仍生效。用户尚未提供本次商品档位/Build/到期时间，不补写未经确认的细节；同账号恢复、重开后的会员持久状态及其他真实 StoreKit 矩阵仍待签收。此成功不是 Apple Production 真实扣费或其授权 401 已关闭的证据，既有 JWS 签名链缺口仍在。下一步只补重开与同账号恢复，必要取证结束后关闭临时诊断；不要求重复购买或迁移旧测试权益。状态保持 CODE_DONE，本轮仅更新证据，不改产品/配置、不提交推送或操作服务器。
+- 交付及用户真机反馈（2026-09-18）：staging `58e4975`、production `a6f0964` 已定向提交并原子普通推送，远端头一致，五文件范围核对通过；原配置检查再次分别通过，临时交付副本经白名单核验后清理，可重建，原用户资料保留。用户随后恢复购买显示“这笔 App Store 订阅属于另一个叙账账号，请登录购买时的手机号账号恢复”，对应 APP_ACCOUNT_MISMATCH：按当前代码顺序，查询及前置载荷检查已通过，Apple 返回的非空 appAccountToken 与当前服务账号 ID 不同，不再只是诊断布尔值无法区分缺失/不匹配。结合用户确认内测 staging 首次购买，符合旧测试内部账号标识在生产不匹配的情况；不将此表述为另一个真实用户占有，也没有凭该提示识别具体旧账号。此单条反馈验证了该次请求到达归属拒绝路径，不代表当前生产账号购买/恢复成功或 Production 授权 401 关闭。下一步以独立干净的 Sandbox 测试身份在生产业务账号下验证新购买及同账号恢复，保留不迁移/不改绑边界；正式生产授权与签名链风险继续独立保留。
+  - **2026-09-28 勘误**：句中「签名链风险」已失效（第 180 节已实现，见第 218 节）；「正式生产授权」风险仍然有效。状态仍 CODE_DONE，本轮只补验收证据，不改产品、配置或测试，不提交推送或操作服务器。
+- 用户新沙盒购买通过（2026-09-18）：用户在创建并登录 Sandbox 测试账号后反馈“生产安装包订阅成功了”。按本线程此前确认的 TestFlight 安装渠道，记录为生产配置 App＋生产业务后端＋Apple Sandbox 的新购买开通真机通过；结合前述旧测试账号交易被拒，支持路由修复且账号保护仍生效。用户尚未提供本次商品档位/Build/到期时间，不补写未经确认的细节；同账号恢复、重开后的会员持久状态及其他真实 StoreKit 矩阵仍待签收。此成功不是 Apple Production 真实扣费或其授权 401 已关闭的证据，既有 JWS 签名链缺口仍在。
+  - **2026-09-28 勘误**：末句「既有 JWS 签名链缺口仍在」已失效（第 180 节已实现，见第 218 节）。Production 授权 401 与真实扣费部分仍然有效。下一步只补重开与同账号恢复，必要取证结束后关闭临时诊断；不要求重复购买或迁移旧测试权益。状态保持 CODE_DONE，本轮仅更新证据，不改产品/配置、不提交推送或操作服务器。
 
 - 用户同账号恢复通过（2026-09-18）：用户进一步确认“恢复购买是成功的”，将生产配置 TestFlight＋生产业务后端＋Apple Sandbox 的同账号恢复购买记录为真机通过；新购买、同账号恢复均已有用户成功反馈，旧测试账号交易拒绝证据保留，无需为这两项重复购买。重开后的会员持久状态、未提供的 Build/商品档位及其他 StoreKit 矩阵仍不冒充已验证，Production 授权 401 与签名链问题未因此关闭。下一步只补 App 重开状态确认，取证结束关闭临时诊断，再独立核实正式环境；本节仍 CODE_DONE。本轮仅补此验收记录，保留后续第 175/176 节及其他现场改动，不改产品、配置、测试，不提交推送或操作服务器。
 
@@ -5903,6 +5911,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 诊断关闭边界：config.js 和 .env.iap-diagnostics.example 均默认 false；仅默认关闭或到期不等于线上已持久关闭。对文档服务器进行一次短时、严格主机校验、非交互 SSH 探测，返回 Permission denied (publickey,password)，未获得服务器执行权限，未修改线上文件或重启服务。交接步骤为分别在 /opt/xuzhang/xuzhangapp/backend/.env 与 /opt/xuzhang/xuzhangapp-staging/backend/.env 设置 IAP_DIAGNOSTICS_ENABLED=false，并显式携带该 false 值分别 pm2 restart backend / backend-staging --update-env，避免旧 PM2 环境覆盖文件；两套 health 与关闭状态需收到操作结果后验收。保留审核登录、其他 IAP 配置、账号/交易和原日志。
 - 验证与保护：主代理与独立只读审阅交叉核对分支 tree、工程两行差异和首页补丁范围；没有业务代码变更，不重复完整门禁，沿用第 174/176/177 节测试证据。用户 backend/.env.staging.example SHA256 保持 `48FF5A142D67DBEAD8817432F23CE2A089C9A11C54D0A9D1B41622A30F8CD92C`；全部未跟踪素材、输出和既有 worktree 保留。没有提交、推送、部署、私钥读取或全量运行环境输出。
 - 剩余风险与下一步：先由有权限的操作者关闭两环境诊断并核对服务健康/有效开关。用户已验收生产配置 TestFlight 的 Sandbox 购买、恢复和加速到期，不要求重复此验收；真实 Apple Production 401 授权原因及既有 JWS 签名链缺口仍未解决，不能据此宣称真实收费链路已完成验收。首页业务补丁是否同步需单独定向处理，个人 AI 池及其他路线不启动。
+  - **2026-09-28 勘误**：本行「既有 JWS 签名链缺口仍未解决」已失效（第 180 节已实现，见第 218 节）。真实 Apple Production 401 授权原因仍然有效。
 
 ### 179. IAP 支付安全缺口只读复核（2026-09-18）
 
@@ -5910,8 +5919,10 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 线上状态：生产与 staging `/health` 均返回 `ok: true`；生产诊断关闭由操作者完成重启，但本机仍无 SSH 权限，无法读取 PM2 有效环境快照，因此不把 health 当作开关验收证据。staging 未配置诊断开关，代码默认 `false`，保持不动。
 - 确定缺口：`backend/src/iapService.js` 的 Apple 响应信任路径仅通过 split/base64url/JSON.parse 读取 `signedTransactionInfo`，未验证 compact JWS 三段、protected `alg=ES256`、`x5c` 证书链、Apple Root CA、证书有效期或签名；商品、bundle、环境、账号和会员写入建立在未验签 payload 上。客户端 JWS 仍只能作为有界 Sandbox 路由 hint，不能升级为权益依据。诊断日志明确 `signatureVerified=false`，不应改作授权路径。
 - 最小后续任务：单独建立服务端 Apple JWS verifier（固定 Apple 信任锚、证书链/用途/有效期/ES256 验签），在现有业务字段校验和交易绑定之前执行；无效响应映射稳定的 `IAPVerifyError`，并补有效链、篡改、错误签名、非 Apple 证书、错误算法、段数/大小边界及“无交易/无会员写入”测试。不得借此修改客户端 hint、Production 401 回退、沙盒路由或账号迁移合同。
+  - **2026-09-28 勘误**：本任务已于第 180 节（2026-09-18）完成并交付，不再待办。见第 218 节收敛记录。
 - 401 结论：现有交易查询的 Production `401` 仍只能证明该次生产端点授权失败；Sandbox `200` 不足以区分 App Store Server API key 权限、issuer/key/bundle/JWT 或端点上下文。需要另行执行不带 transactionId 的 Apple Notification History 只读授权探测后再定位，不在本轮凭猜测改密钥或 endpoint。
 - 证据与保护：审计结论来自 `iapService.js`、诊断/路由专项及既有测试；当前 backend 测试覆盖路由和边界但没有真实 x5c 链验签 fixture。没有代码、依赖、服务器配置、交易数据、提交或推送变更。下一任务为用户明确授权后的独立 IAP JWS 验签修复与双环境测试。
+  - **2026-09-28 勘误**：所述「没有真实 x5c 链验签 fixture」已由第 180 节补齐（TEST-ONLY 合成三证书链）；「下一任务」已完成。见第 218 节。
 
 
 ### 179. FIRST-USE-PERMISSION-SYNC-FEEDBACK-01：首次记账定位与联网备份反馈（2026-09-18）
@@ -6308,3 +6319,47 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
   - `release_xcode_gate: OK, exit 0`
 - 冻结边界：只修改门禁脚本 `scripts/validate_release_gate.py` 中两处缺失 `-destination` 的 build 步骤；未修改任何产品 Swift 代码、工程配置、Info.plist、entitlements 或其他脚本。
 - 剩余风险与下一步：`RELEASE-02` 总体仍为 `BLOCKED`，xcode 门禁三项已闭环，剩余未闭环项为 Debug/Release Archive 产物（`.ipa` / `.xcarchive`）、device-audit（真机容器审计）、Instruments（REAL-01～REAL-06 性能矩阵）、真机功能流程（R-01～R-11 及 FIX-001～FIX-002 系列）与封版真机证据，以及 iOS 27.0 运行时覆盖。
+
+### 218. 台账勘误：收敛 Apple JWS 签名链过期表述（2026-09-28）
+
+- 状态：`VERIFIED`（仅台账文档更正，无产品代码、配置、门禁或部署变更）
+- 背景：`RELEASE-02` 阻塞清单中长期保留「Apple JWS 签名链未实现 / 未验证」表述。该表述自第 180 节（2026-09-18）实现后已失效，但截至第 216/217 节仍有 7 处过期引用散落在正文「结论 / 阻塞 / 剩余风险」行，会让后续读者误认为支付验签仍是未修缺口。本节统一收敛。
+- 已实现事实（复核证据，2026-09-28）：
+  - 实现提交 `7ada3f5 Add server-side Apple JWS verification`（2026-09-18 17:14 +0800），已存在于 `feature/xuzhangapp-staging`、`release/sync-2026-09-21`、`xuzhang1.0-release-2026` 三个分支。
+  - `backend/src/appleJwsVerifier.js` 引入 Apple 官方 `@apple/app-store-server-library@3.1.0`，`SignedDataVerifier` 使用入库的 Apple Root CA G2/G3（`backend/certs/`，已被 git 跟踪）执行证书链、Apple OID、有效期与 ES256 签名校验；本地另做三段 compact JWS、`alg=ES256`、三张 `x5c`、JWS ≤128 KiB、单证书 ≤16 KiB 的前置校验。
+  - 接入位置正确：`backend/src/iapService.js:60` 的 `verifyAppleSignedTransaction` 在读取 payload 之后、任何商品/账号/期限/绑定/会员写入之前执行；验签失败统一映射 `APPLE_BAD_RESPONSE` / 502。客户端 JWS 仍仅作受限 Sandbox endpoint hint，不授予权益。
+- 更正清单（仅行内追加「2026-09-28 勘误」指针，不改写历史结论原文）：
+  1. 第 169 节剩余风险行：「生产 Apple JWS 签名链校验仍是独立安全缺口」。
+  2. 第 172 节第 5 条：「`iapService.js` 仍只解码 JWS payload，未验证 Apple JWS 签名」。
+  3. 第 172 节第 7 条：「`iapService.js` 仍只 Base64 解码 JWS，未验证 Apple 签名/证书链」。
+  4. 第 145 节剩余风险行：「Apple JWS 签名链仍未实现」。
+  5. 第 146 节封版阻塞行：「Apple JWS 签名链仍未实现」。
+  6. 第 174 节发布阻塞保留行：「支付 Apple JWS 签名链缺口……未关闭」。
+  7. 第 177 节交付反馈行：「正式生产授权与签名链风险继续独立保留」。
+  8. 第 178 节剩余风险行：「既有 JWS 签名链缺口仍未解决」。
+  9. 第 179 节最小后续任务行与证据行：所述 verifier 待建、无 x5c 链验签 fixture 均已由第 180 节完成。
+  10. 第 176 节用户沙盒购买通过行：「既有 JWS 签名链缺口仍在」。
+- 保留项（明确不因本次勘误关闭，仍属有效阻塞或待决）：
+  - `APPLE_JWS_ONLINE_CHECKS` 默认 `false`（`backend/src/config.js:70`，`.env.example:49`）。Apple 官方库的在线吊销检查未启用，属有意默认；生产是否开启为独立配置决策，未在本次范围内决定。
+  - 服务端 JWS 配置与部署状态：代码已合入分支，但自第 179 节起服务器 SSH 只读探测持续 `Permission denied (publickey,password)`，无线上运行证据。代码在分支上不等于线上 PM2 已运行该版本。
+  - 真实 Production 交易验单、Production 授权 401 根因、TestFlight/App Review Sandbox 反向矩阵（待处理、失败、快速重复点击、无权益、过期、撤销、跨账号、错环境）仍独立待关闭。
+- 冻结边界：本次仅修改本台账的勘误指针与本节新增内容。未修改任何产品 Swift/JS 代码、`backend/certs/`、环境模板、工程配置、门禁脚本、分支或部署状态；既有 dirty worktree（`NativeDemoApp/Views/RecordView.swift` 及全部未跟踪资料）保持原样。
+- 验证证据（2026-09-28，Windows）：
+  - `git status --short`：确认产品与配置无变更，仅本台账被修改。
+  - `node scripts/verify-iap-jws-signature.mjs` 通过：输出「valid production/sandbox chains, tampering, algorithm, chain shape, size, and untrusted-root rejection」。
+  - `npm test --prefix backend` 全绿，含该 JWS 专项与 153 项 IAP 路由场景。
+  - `git diff --check` 通过，无行尾空白或冲突标记。
+- 剩余风险与下一步：本节只消除文档层面的误导，不改变 `RELEASE-02` 总体 `BLOCKED` 状态，也不代表线上验签已生效。剩余未闭环项仍为 Debug/Release Archive 产物、device-audit、Instruments（REAL-01～REAL-06）、真机功能流程（R-01～R-11 及 FIX-001～FIX-002 系列）、封版真机证据与 iOS 27.0 运行时覆盖。下一项仍为 `RELEASE-02` 统一签收；如需推进支付安全，应先由用户决定 `APPLE_JWS_ONLINE_CHECKS` 取值并确认部署状态核实方式。
+
+### 219. RELEASE-02：Xcode Cloud 对 d574713 编译与 Test action 通过（2026-10-08）
+
+- 状态：`VERIFIED`（仅限 Xcode Cloud 编译 + Test action 两项，非 `RELEASE-02` 整体解锁）
+- 被测提交：`feature/xuzhangapp-staging` @ `d57471368368e057da39f465b0db5af6b391017d`，与 `origin` 同步（0 ahead / 0 behind），包含 FIX-004～FIX-007、第 180 节服务端 JWS 验签与第 216/217 节门禁修复。已排除 `feature/xuzhangapp-staging-1.1`（停在 2026-09-10 `2c0ca9f`，落后 88 个提交，不含上述修复）。
+- 前置阻塞与解除：首次触发返回 `This request requires an in-effect agreement that has not been signed or has expired.`，原因为 App Store Connect「付费 App 协议」更新待接受；用户以账号持有人身份接受后恢复。该阻塞属 Apple 账号侧，与代码无关。
+- 结果（用户反馈）：同一提交 `d574713` 的 Xcode Cloud 编译与 Test action 均成功。中间一次「编译失败、Test 成功」的运行未提供日志与 commit，不作为证据，也不据此推断代码问题。
+- 意义：补齐第 215 节以来缺失的 Cloud 侧证据——本地 624 条全量 XCTest 结论在干净 Cloud 环境复现；Scheme 共享 TestAction 为 Debug、`parallelizable = NO`。
+- 证据边界：用户未提供 workflow 名称、`CI_BUILD_NUMBER`、Archive 是否执行、Test 用例数与日志。因此：
+  1. 不把本次「编译成功」视为 Release Archive 通过；Archive 产物（`.xcarchive`/`.ipa`）与 TestFlight 上传仍待单独确认。
+  2. Cloud 路径经 `ci_scripts/ci_pre_xcodebuild.sh` 将 `CFBundleVersion` 覆盖为 `CI_BUILD_NUMBER`，Cloud 产物不是 `Info.plist` 中的 Build 10；第 197/202 节「Build 10 核对」口径只适用于本地 Archive，Cloud 产物以实际 build 号记录。
+- 冻结边界：本节仅更新台账；未修改代码、Scheme、CI 脚本、配置、证书或分支；未提交、未推送、未部署。根目录新出现的未跟踪空壳 `package-lock.json`（`packages: {}`）未处理、不得提交。
+- 剩余风险与下一步：`RELEASE-02` 总体仍为 `BLOCKED`。剩余：Release Archive 产物与 build 号确认、TestFlight 包安装、device-audit、Instruments REAL-01～REAL-06、真机 R-01～R-11 与 FIX-001/FIX-002 系列、iOS 27.0 运行时覆盖；`APPLE_JWS_ONLINE_CHECKS` 取值与线上部署版本核实仍待用户决定。下一项：用该 workflow 的 Archive（或 TestFlight 分发）产出 `d574713` 的可安装包，再在 iPhone 上执行真机矩阵。
