@@ -6386,3 +6386,16 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据（Windows）：`run_experience_static_check.py` 显示 `OK (1086 checks passed)`，包含新断言；staging 分支 `validate_release_gate.py --phase windows` 输出 `release_repository_gate: OK`。生产分支的门禁结果见同步提交。
 - 冻结边界：没有改后端、审核登录策略、协议勾选门槛、错误文案、会员权益、IAP 或 UI。`restoreCloudSession` 等其他调用 `fetchMemberMe` 的路径不变。
 - 剩余风险与下一步：用 Xcode Cloud 跑 Build、Test 和 Archive，确认 Swift 能编译、624 条 XCTest 不回归；在 TestFlight 生产包上用审核账号登录，并在网络不稳定时（例如登录瞬间切换网络）确认不再退回登录页，iPadOS 27 优先。
+
+### 222. RELEASE-02：生产后端恢复与审核账号登录打通（2026-10-08）
+
+- 状态：`VERIFIED`（仅限生产后端启动与审核账号登录；IAP Production 401 与真机矩阵仍未关闭）
+- 现象：TestFlight Build 433（`xuzhang1.0-release-2026@c5487ce`）用审核号登录失败。
+- 根因与处理（按排查顺序）：
+  1. 生产后端拉到 `c5487ce` 后没有执行 `npm ci`，启动报 `ERR_MODULE_NOT_FOUND`。补装依赖后，启动自检报 `APPLE_APPLE_ID is required for production IAP verification`（第 180 节 JWS 验签引入的生产必填项），进程卡住不监听 8790，nginx 返回 502。补上 `APPLE_APPLE_ID` 后，`/health` 返回 `ok:true`。
+  2. 后端恢复后，nginx 日志显示 Build 433 的 `/v1/auth/sms/verify` 返回 `400`（35 字节，即 `INVALID_CODE`）。逐项检查服务端配置：`enabled`、手机号、到期时间（2026-11-08）、`isActive` 都正常，问题在于手上的验证码和 `.env` 里的摘要不是同一对。改为在服务器上一次完成生成新验证码、写入摘要（先备份 `.env`）、重启并本机自测，之后 TestFlight 登录成功。
+- 对 9-23 被拒原因的判断：`77b90a3` 已经包含 `APPLE_APPLE_ID` 必填项，但没有证据表明审核当天生产已部署该提交；pm2 日志里有生产曾正常处理 IAP 请求的记录。因此「缺 `APPLE_APPLE_ID` 导致 502」和「验证码与摘要不一致」都可能是原因，需要看 9-23 的 nginx 状态码分布才能确定，本节不下结论。
+- 部署规则补充：生产拉新代码后，必须先执行 `npm ci --omit=dev`，并通过启动自检，然后才能重启 pm2；审核验证码必须在服务器上生成并自测，不经过手动复制。pm2 中 backend 的 `exec cwd` 指向 `ai-proxy`，不影响运行（`.env` 按脚本目录解析），但需要后续修正。
+- 冻结边界：没有修改仓库代码；服务器上的改动由用户执行，仅涉及 `.env`、依赖和 pm2 重启。
+- 剩余风险与下一步：把 App Store Connect 审核信息里的验证码换成新值，删除服务器上的 `.env.bak-review`；对审核环境（iPadOS 27）再验证一次登录；pm2 日志中 IAP Production 查询仍返回 401（`APPLE_LOOKUP_FAILED`）、`accountMatches:false`，这是独立问题，可能影响审核员测试订阅，需要在提交前或提交后尽快排查。
+- 补充（同日）：用审核号在 TestFlight Build 433 测试订阅时，旧沙盒 Apple ID 升级永久会员返回 `APP_ACCOUNT_MISMATCH`。原因是该 Apple ID 曾在另一个叙账账号下购买过，Apple 返回的是旧交易，交易里的 `appAccountToken` 与审核号不一致，属于预期拦截，不是缺陷。换用全新的沙盒测试员后，审核号完成年度订阅和升级永久会员，均开通成功。遗留文案问题：购买流程在 `APP_ACCOUNT_MISMATCH` 时，永久会员也显示为「订阅」；恢复流程已按商品区分。留到下个版本修复，本次不重新打包。
