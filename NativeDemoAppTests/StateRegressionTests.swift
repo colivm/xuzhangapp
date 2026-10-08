@@ -873,6 +873,7 @@ final class CommittedRecordNoteFieldTests: XCTestCase {
 
 #if canImport(WeatherKit)
 final class WeatherKitConditionBridgeTests: XCTestCase {
+    @MainActor
     func testPrecipitationConditionsKeepExistingRainAndSnowGroups() {
         XCTAssertEqual(WeatherCompanionService.legacyWeatherCode(for: .rain), 61)
         XCTAssertEqual(WeatherCompanionService.legacyWeatherCode(for: .freezingRain), 61)
@@ -1014,6 +1015,58 @@ final class OCRDateEvidencePolicyTests: XCTestCase {
         XCTAssertEqual(calendar.component(.day, from: full), 21)
         XCTAssertEqual(calendar.component(.hour, from: full), 8)
         XCTAssertEqual(calendar.component(.day, from: labeledBare), 22)
+    }
+
+    func testSingleDigitClockTimesSurviveParsing() throws {
+        let explicit = try XCTUnwrap(OCRDateEvidencePolicy.firstDate(
+            in: "交易时间 2026-04-21 8:35",
+            now: now,
+            calendar: calendar
+        ))
+        let chinese = try XCTUnwrap(OCRDateEvidencePolicy.firstDate(
+            in: "2026年4月21日 8:35",
+            now: now,
+            calendar: calendar
+        ))
+        let labeledBare = try XCTUnwrap(OCRDateEvidencePolicy.firstDate(
+            in: "日期\n4.22 8:35",
+            now: now,
+            calendar: calendar
+        ))
+
+        XCTAssertEqual(calendar.component(.day, from: explicit), 21)
+        XCTAssertEqual(calendar.component(.hour, from: explicit), 8)
+        XCTAssertEqual(calendar.component(.minute, from: explicit), 35)
+
+        XCTAssertEqual(calendar.component(.day, from: chinese), 21)
+        XCTAssertEqual(calendar.component(.hour, from: chinese), 8)
+        XCTAssertEqual(calendar.component(.minute, from: chinese), 35)
+
+        XCTAssertEqual(calendar.component(.day, from: labeledBare), 22)
+        XCTAssertEqual(calendar.component(.hour, from: labeledBare), 8)
+        XCTAssertEqual(calendar.component(.minute, from: labeledBare), 35)
+    }
+
+    func testDigitsGluedToTheDateDoNotBecomeAClockTime() throws {
+        let explicit = try XCTUnwrap(OCRDateEvidencePolicy.firstDate(
+            in: "交易时间 2026-04-2108:35",
+            now: now,
+            calendar: calendar
+        ))
+        let chinese = try XCTUnwrap(OCRDateEvidencePolicy.firstDate(
+            in: "4月20日08:35",
+            now: now,
+            calendar: calendar
+        ))
+
+        XCTAssertEqual(calendar.component(.day, from: explicit), 21)
+        XCTAssertEqual(calendar.component(.hour, from: explicit), 0)
+        XCTAssertEqual(calendar.component(.minute, from: explicit), 0)
+
+        XCTAssertEqual(calendar.component(.month, from: chinese), 4)
+        XCTAssertEqual(calendar.component(.day, from: chinese), 20)
+        XCTAssertEqual(calendar.component(.hour, from: chinese), 0)
+        XCTAssertEqual(calendar.component(.minute, from: chinese), 0)
     }
 }
 
@@ -1386,8 +1439,15 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
     }
 
     func testQualifiedMomentPhotoCanBecomeAConcreteLead() {
+        // The title has to clear `EchoAnchorService.isEligibleLifeTraceTitle`
+        // on its own. This fixture is not user-edited, so the
+        // `RecordPrefillService.isHabitTitle` gate applies and rejects titles
+        // of 12 characters or fewer. A real handwritten restaurant note is
+        // long enough to pass, so keep this one at 13 characters rather than
+        // leaning on `userEdited` the way the sibling test does.
+        let momentTitle = "楼下那家红汤馄饨配一碟小菜"
         let moment = item(
-            "红汤馄饨",
+            momentTitle,
             category: .dining,
             day: 21,
             hasPhoto: true,
@@ -1405,7 +1465,7 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.leadSignalID, "photo:\(moment.id.uuidString)")
-        XCTAssertTrue(plan.headline.contains("红汤馄饨"))
+        XCTAssertTrue(plan.headline.contains(momentTitle))
         XCTAssertTrue(plan.headline.contains("还留着一张照片"))
         XCTAssertTrue(plan.summary.contains("只记下一笔"))
     }
@@ -3634,7 +3694,9 @@ final class PlaybackLivingVoiceCopyTests: XCTestCase {
             createdAt: date(7, 14, 0, 8),
             emotionTag: "打车这一程",
             userEditedTitle: false,
-            memoryImageData: Data([0x01])
+            // 图片字节数要够大，这笔记录才有资格进入周回看的画面锚点。
+            // 1 字节会被 imageQualityScore 判为“不可能是照片”，直接扣分。
+            memoryImageData: Data(repeating: 0x01, count: 140_000)
         )
         let rows = [
             item("早餐", amount: 12, category: .dining, at: date(7, 13, 8)),
@@ -4365,6 +4427,7 @@ final class SingleRecordEmotionBoundaryTests: XCTestCase {
         XCTAssertEqual(breakfast.displayEmotionTag, "周末早餐")
     }
 
+    @MainActor
     func testFirstRecordStoryUsesTimeAndRecordInsteadOfEmotionTemplate() {
         let parking = HomeItem(title: "停车费", amount: 69.8, category: .transport, createdAt: date(7, 47))
         let line = HomeViewModel.singleRecordTodayStoryLine(for: parking, calendar: calendar)
@@ -4485,6 +4548,8 @@ final class SingleRecordEmotionBoundaryTests: XCTestCase {
         let videoScene = LifeSceneSemanticService.classify(video)
         XCTAssertNotEqual(seaweed.displayEmotionTag, "给衣柜添一件")
         XCTAssertNotEqual(video.displayEmotionTag, "健身会员安排")
+        // “裙带菜”落在买菜，而不是网购添置，也不是服饰。
+        XCTAssertEqual(seaweedScene.kind, .groceries)
         XCTAssertNotEqual(seaweedScene.kind, .shopping)
         XCTAssertNotEqual(videoScene.kind, .fitness)
     }
@@ -4524,7 +4589,9 @@ final class SingleRecordEmotionBoundaryTests: XCTestCase {
 
         XCTAssertNotEqual(LifeSceneSemanticService.classify(food).kind, .homeSupply)
         XCTAssertNotEqual(LifeSceneSemanticService.classify(cart).kind, .homeSupply)
-        XCTAssertNotEqual(LifeSceneSemanticService.classify(adultNutrition).kind, .homeSupply)
+        // 母婴用品唯一的出口是“超市买菜”，成人营养品不该从那里进来。
+        // 日用分类本身没有更贴切的兜底，落回 .homeSupply 是诚实的。
+        XCTAssertNotEqual(LifeSceneSemanticService.classify(adultNutrition).kind, .groceries)
     }
 
     func testVehicleMaintenanceDoesNotBecomeAnOutingScene() {
@@ -5711,7 +5778,8 @@ final class TraceSnapshotLifecycleTests: XCTestCase {
 final class RecordInputAssistanceSnapshotTests: XCTestCase {
     func testDeferredQuickNotesKeepRecommendationAndHistoricalPoolIdentical() {
         let calendar = Calendar.current
-        let reference = calendar.date(bySettingHour: 18, minute: 43, second: 0, of: Date())!
+        let fixedDay = DateComponents(calendar: calendar, year: 2026, month: 10, day: 9).date!
+        let reference = calendar.date(bySettingHour: 18, minute: 43, second: 0, of: fixedDay)!
         let dates = (1...60).compactMap { calendar.date(byAdding: .day, value: -$0, to: reference) }
             .filter { RecordCalendarContext.dayKind(for: $0) == RecordCalendarContext.dayKind(for: reference) }
             .prefix(8)
@@ -6033,27 +6101,48 @@ final class RecordInputAssistanceSnapshotTests: XCTestCase {
 
     func testManualAmountMatchesShortcutAmountWhenHistoryHasStableMerchantTitle() {
         let calendar = Calendar.current
-        let referenceDate = calendar.date(
-            bySettingHour: 9,
-            minute: 8,
-            second: 0,
-            of: Date()
-        ) ?? Date()
-        let repeated = (0..<3).map { index in
-            HomeItem(
+        // A fixed local Friday that is a plain workday (not a public holiday).
+        // 2026-09-25 was the original pick but it falls on Mid-Autumn Festival
+        // (lunar 8/15), which RecordCalendarContext classifies as .holiday, so the
+        // reference day's dayKind never matches the workday D-1..D-3 context items
+        // and frequentSuggestions is always empty on that date.
+        // 2026-10-09 is the next Friday with no holiday in the D-0..D-3 window.
+        var referenceComponents = DateComponents()
+        referenceComponents.year = 2026
+        referenceComponents.month = 10
+        referenceComponents.day = 9
+        referenceComponents.hour = 9
+        referenceComponents.minute = 8
+        referenceComponents.second = 0
+        guard let referenceDate = calendar.date(from: referenceComponents) else {
+            return XCTFail("The fixed reference date must exist in the test calendar.")
+        }
+        // Shift by calendar days rather than 86_400s so a DST transition cannot
+        // move these records into a neighbouring hour bucket.
+        let repeated: [HomeItem] = (0..<3).compactMap { index in
+            guard let createdAt = calendar.date(
+                byAdding: .day,
+                value: -(index + 1),
+                to: referenceDate
+            ) else { return nil }
+            return HomeItem(
                 title: "瑞幸咖啡",
                 amount: 9.9,
                 category: .dining,
-                createdAt: referenceDate.addingTimeInterval(TimeInterval(-(index + 1) * 86_400)),
+                createdAt: createdAt,
                 userEditedTitle: true
             )
         }
-        let supporting = repeated + (0..<3).map { index in
-            HomeItem(
-                title: "日常记录 \(index)",
-                amount: Double(20 + index),
-                category: .other,
-                createdAt: referenceDate.addingTimeInterval(TimeInterval(-(index + 1) * 7_200))
+        XCTAssertEqual(repeated.count, 3)
+        var supporting: [HomeItem] = repeated
+        for index in 0..<3 {
+            supporting.append(
+                HomeItem(
+                    title: "日常记录 \(index)",
+                    amount: Double(20 + index),
+                    category: .other,
+                    createdAt: referenceDate.addingTimeInterval(-Double(index + 1) * 7_200)
+                )
             )
         }
         let historyKey = RecordInputAssistanceComputation.historyKey(
@@ -6093,7 +6182,7 @@ final class RecordInputAssistanceSnapshotTests: XCTestCase {
         XCTAssertEqual(history.frequentSuggestions.first?.amount, 9.9)
         XCTAssertEqual(snapshot.result?.title, "瑞幸咖啡")
         XCTAssertTrue(["frequent", "habit", "scene_habit"].contains(snapshot.result?.source ?? ""))
-        XCTAssertEqual(snapshot.appliedCategory, .dining)
+        XCTAssertEqual(snapshot.appliedCategory, HomeItem.Category.dining)
     }
 
     func testPreviewLifeMarkSnapshotIsDeterministicForTheSameDraftAndLedgerRevision() {
@@ -6562,7 +6651,7 @@ final class RecordRecommendationConsistencyTests: XCTestCase {
         let title = "买到常用的小东西"
         let context = RecordGeneratedNoteContext(title: title, category: .shopping)
         let date = referenceDate
-        for offset in [0.0, 6 * 3_600] {
+        for offset in [TimeInterval(0), TimeInterval(6 * 3_600)] {
             let currentDate = date.addingTimeInterval(offset)
             let historyKey = RecordInputAssistanceComputation.historyKey(
                 ledgerRevision: offset == 0 ? 153 : 154,
@@ -6600,7 +6689,7 @@ final class RecordRecommendationConsistencyTests: XCTestCase {
                     generatedNoteContext: context
                 )
             )
-            XCTAssertEqual(resolution.category, .shopping)
+            XCTAssertEqual(resolution.category, HomeItem.Category.shopping)
             XCTAssertEqual(resolution.title, title)
             XCTAssertTrue(resolution.trace.contains("category:generatedDraft"))
             XCTAssertFalse(resolution.trace.contains("category:userLocked"))
@@ -7394,12 +7483,14 @@ final class HomeDashboardSnapshotTests: XCTestCase {
                 userEditedTitle: true
             )
         }
-        items += (1...4).map { index in
-            HomeItem(
-                title: "日常记录 \(index)",
-                amount: Double(10 + index),
-                category: .other,
-                createdAt: now.addingTimeInterval(TimeInterval(-index * 24 * 60 * 60))
+        for index in 1...4 {
+            items.append(
+                HomeItem(
+                    title: "日常记录 \(index)",
+                    amount: Double(10 + index),
+                    category: .other,
+                    createdAt: now.addingTimeInterval(-Double(index) * 24 * 60 * 60)
+                )
             )
         }
 
@@ -7440,12 +7531,14 @@ final class HomeDashboardSnapshotTests: XCTestCase {
                 userEditedTitle: true
             )
         }
-        history += (1...4).map { index in
-            HomeItem(
-                title: "普通记录 \(index)",
-                amount: Double(20 + index),
-                category: .other,
-                createdAt: now.addingTimeInterval(TimeInterval(-index * 24 * 60 * 60))
+        for index in 1...4 {
+            history.append(
+                HomeItem(
+                    title: "普通记录 \(index)",
+                    amount: Double(20 + index),
+                    category: .other,
+                    createdAt: now.addingTimeInterval(-Double(index) * 24 * 60 * 60)
+                )
             )
         }
 
@@ -7506,6 +7599,41 @@ final class LifeMarkFactAuthorityTests: XCTestCase {
             hour: hour,
             minute: minute
         ))!
+    }
+
+    func testNeutralTitleNeverCreatesFactsFromCategoryWordAlone() {
+        // semanticText 会把 category.rawValue 与 category.label 拼进关键词匹配文本。
+        // 若某个 definition 关键词或语义守卫关键词恰好等于类目词，该类目下的所有条目
+        // 都会仅凭类目无条件命中（false positive）或被守卫无条件误杀（false negative）。
+        // 中性标题不含任何 definition 关键词，因此任何类目都不应产生标记。
+        //
+        // 唯一豁免：leisure 按产品意图对整个 .entertainment 类目兜底（requiresKeywordMatch
+        // 为 false 是显式声明的，不依赖类目词碰撞），因此娱乐类目允许且只允许出现
+        // leisure 及其派生的 milestone/streak 聚合。
+        let leisureExempt: Set<String> = ["leisure"]
+        for category in HomeItem.Category.allCases {
+            let neutral = HomeItem(
+                title: "记录一笔",
+                amount: 50,
+                category: category,
+                createdAt: date(20, hour: 18),
+                userEditedTitle: true
+            )
+            let marks = LifeMarkService.aggregates(
+                for: [neutral],
+                allItems: [neutral],
+                isMember: true,
+                limit: 12
+            )
+            let unexpected = marks.filter { mark in
+                guard category == .entertainment else { return true }
+                return !leisureExempt.contains(where: { mark.id == $0 || mark.id.hasPrefix("\($0)_") })
+            }
+            XCTAssertTrue(
+                unexpected.isEmpty,
+                "\(category.rawValue) 类目的中性标题仅凭类目词命中了 \(unexpected.map(\.id))"
+            )
+        }
     }
 
     func testGeneratedDisplayCopyDoesNotCreateGroceryOrSocialFacts() {
@@ -7569,6 +7697,41 @@ final class LifeMarkFactAuthorityTests: XCTestCase {
         XCTAssertTrue(marks.contains { $0.id == "social_care" })
         XCTAssertTrue(marks.contains { $0.id == "commute" })
         XCTAssertEqual(LifeSceneSemanticService.classify(commute).kind, .commute)
+    }
+
+    func testLiveEventKeywordsProduceLiveEventNotLeisure() {
+        // broadLeisureSpecificDefinitionIDs 的抑制逻辑是逐条目的：对于匹配 live_event 的
+        // 条目，matches(_:leisure) 会因检测到特定标记而返回 false，leisure 的 matchedItems
+        // 为空时不会生成聚合。
+        // 因此本测试只放确实命中 live_event 的条目，不掺入中性条目（中性条目合法产生
+        // leisure，会干扰断言）。
+        let concert = HomeItem(
+            title: "演唱会门票",
+            amount: 680,
+            category: .entertainment,
+            createdAt: date(20, hour: 19)
+        )
+        let musical = HomeItem(
+            title: "音乐剧 猫",
+            amount: 480,
+            category: .entertainment,
+            createdAt: date(21, hour: 19)
+        )
+
+        let marks = LifeMarkService.aggregates(
+            for: [concert, musical],
+            allItems: [concert, musical],
+            isMember: true,
+            limit: 12
+        )
+
+        // 演唱会和音乐剧条目应产生 live_event
+        XCTAssertTrue(marks.contains { $0.id == "live_event" },
+                      "含演唱会/音乐剧关键词的条目未产生 live_event 标记")
+
+        // 批次内所有条目均命中 live_event，leisure 的 matchedItems 为空，不应生成 leisure 聚合
+        XCTAssertFalse(marks.contains { $0.id == "leisure" },
+                       "所有条目均命中 live_event 后 leisure 仍然出现，broadLeisureSpecificDefinitionIDs 排除失效")
     }
 
     func testOCRTransitRouteUsesWorkdayHistoryInsteadOfExactAmount() {
@@ -10955,7 +11118,7 @@ final class PetCompanionMessagePolicyTests: XCTestCase {
             calendar: calendar
         )
 
-        XCTAssertEqual(messages.map(\.text), ["下午这趟通勤是在热天里记下的。"])
+        XCTAssertEqual(messages.map(\.text), ["下午这趟通勤是在热天里记下的。现在外面在下雨，如果还要出门，记得带伞，路上慢一点。"])
     }
 
     func testSystemWarmTagDoesNotBecomeAClaimAboutTheUser() {
@@ -11545,13 +11708,27 @@ final class ReleaseScaleFixtureTests: XCTestCase {
     }
 
     private func loadManifest() throws -> Manifest {
-        let url = repositoryRoot.appendingPathComponent("qa/release_fixtures/manifest.json")
+        let url = try fixtureURL(named: "manifest.json")
         return try JSONDecoder().decode(Manifest.self, from: Data(contentsOf: url))
     }
 
     private func loadFixture(file: String) throws -> [HomeItem] {
-        let url = repositoryRoot.appendingPathComponent("qa/release_fixtures/\(file)")
+        let url = try fixtureURL(named: file)
         return try JSONDecoder().decode([HomeItem].self, from: Data(contentsOf: url))
+    }
+
+    private func fixtureURL(named file: String) throws -> URL {
+        let repositoryURL = repositoryRoot.appendingPathComponent("qa/release_fixtures/\(file)")
+        if FileManager.default.fileExists(atPath: repositoryURL.path) {
+            return repositoryURL
+        }
+        if let bundleURL = Bundle(for: ReleaseScaleFixtureTests.self)
+            .url(forResource: file.replacingOccurrences(of: ".json", with: ""),
+                 withExtension: "json",
+                 subdirectory: "release_fixtures") {
+            return bundleURL
+        }
+        throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: repositoryURL.path])
     }
 
     private func minorUnitTotal(_ items: [HomeItem]) -> Int {
@@ -12416,8 +12593,11 @@ final class InsuranceClassificationBoundaryTests: XCTestCase {
     }
 
     func testGenuineDailySupplyStillCreatesTheExistingLifeMark() {
+        // 标题不能用“超市买菜”：它命中 groceries（优先级 34），而 groceries 在
+        // broadDailySupplySpecificDefinitionIDs 里，会把更宽的 daily_supply 压掉。
+        // 纸巾才是只落在 daily_supply 的日用证据。
         let supply = HomeItem(
-            title: "超市买菜",
+            title: "买纸巾",
             amount: 48,
             category: .daily,
             createdAt: date(day: 11, hour: 18),
@@ -12575,6 +12755,35 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
             category: category,
             createdAt: calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: hour))!
         )
+    }
+
+    private func journeyRows() -> [HomeItem] {
+        let specs: [(String, HomeItem.Category, Int, Int, String, String)] = [
+            ("南京电车充电", .transport, 20, 8, "南京", "本城"),
+            ("到宿迁的过路费", .transport, 20, 11, "宿迁", "外地"),
+            ("宿迁电车充电", .transport, 21, 9, "宿迁", "外地"),
+            ("到连云港的过路费", .transport, 22, 11, "连云港", "外地"),
+            ("连云港吃海鲜", .dining, 22, 13, "连云港", "外地"),
+            ("徐记花甲鸡爪｜宿豫店", .dining, 22, 22, "宿迁", "外地"),
+            ("周日返南京过路费", .transport, 23, 17, "南京", "本城")
+        ]
+        return specs.enumerated().map { index, row in
+            HomeItem(
+                id: UUID(uuidString: String(format: "E1000000-0000-0000-0000-%012d", 1_001 + index))!,
+                title: row.0,
+                amount: 28,
+                category: row.1,
+                createdAt: calendar.date(from: DateComponents(
+                    year: 2026, month: 8, day: row.2, hour: row.3
+                ))!,
+                memoryContext: HomeItem.MemoryContext(
+                    weatherKind: nil,
+                    temperatureCelsius: nil,
+                    cityName: row.4,
+                    semanticPlace: row.5
+                )
+            )
+        }
     }
 
     func testEmptyDiscoverSnapshotDoesNotInventCards() {
@@ -12785,19 +12994,23 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
 
         XCTAssertTrue(card.isFeatured)
         XCTAssertEqual(card.evidenceSummary?.total, card.evidenceItemIDs.count)
-        XCTAssertEqual(card.evidenceSummary?.road, 2)
+        // 南京电车充电 is a refuelling node on the route itself, so it belongs to the
+        // road evidence: the trip is certified by the tolls, and the charge is part
+        // of driving them. Only the two tolls plus that charge are road, the two
+        // dining rows are away-from-home activity, and nothing is left over.
+        XCTAssertEqual(card.evidenceSummary?.road, 3)
         XCTAssertEqual(card.evidenceSummary?.activity, 2)
-        XCTAssertEqual(card.evidenceSummary?.other, 1)
-        XCTAssertEqual(card.coreEvidenceItemIDs?.count, 4)
-        XCTAssertEqual(card.boundaryEvidenceItemIDs?.count, 1)
+        XCTAssertEqual(card.evidenceSummary?.other, 0)
+        XCTAssertEqual(card.coreEvidenceItemIDs?.count, 5)
+        XCTAssertEqual(card.boundaryEvidenceItemIDs?.count, 0)
         XCTAssertEqual(
             Set((card.coreEvidenceItemIDs ?? []) + (card.boundaryEvidenceItemIDs ?? [])),
             Set(card.evidenceItemIDs)
         )
         XCTAssertTrue(card.evidenceDisplayText.contains("共 5 笔记录"))
-        XCTAssertTrue(card.evidenceDisplayText.contains("2 笔道路"))
+        XCTAssertTrue(card.evidenceDisplayText.contains("3 笔道路"))
         XCTAssertTrue(card.evidenceDisplayText.contains("2 笔异地活动"))
-        XCTAssertTrue(card.evidenceDisplayText.contains("1 笔路线边界记录"))
+        XCTAssertFalse(card.evidenceDisplayText.contains("路线边界记录"))
     }
 
     func testDiscoverDetailEvidenceResolutionDropsDeletedRecordsAndKeepsOrder() {
@@ -13158,7 +13371,7 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
         let all = LifeJourneyFactService.allFacts(in: rows, calendar: calendar)
         XCTAssertFalse(all.isEmpty)
         XCTAssertEqual(all.first, LifeJourneyFactService.primaryFact(in: rows, calendar: calendar))
-        XCTAssertEqual(Set(all.map(\.id)).count, all.count)
+        XCTAssertEqual(Set(all.map { $0.id }).count, all.count)
     }
 
     func testDiscoverEchoNeedsCurrentAndHistoricalEvidenceOutsideTheJourney() {
@@ -13206,7 +13419,9 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
         XCTAssertEqual(three.flatMap(\.indices), [0, 1, 2])
 
         let six = DiscoverMemoryWallLayoutPolicy.rows(for: 6)
-        XCTAssertEqual(six.map(\.kind), [.hero, .pair, .pair])
+        // hero 占 1 张、pair 占 2 张，[hero, pair, pair] 只能铺满 5 张。
+        // 第 6 张单独成行，只能是 hero。
+        XCTAssertEqual(six.map(\.kind), [.hero, .pair, .pair, .hero])
         XCTAssertEqual(six.flatMap(\.indices), Array(0..<6))
 
         let many = DiscoverMemoryWallLayoutPolicy.rows(for: 9)

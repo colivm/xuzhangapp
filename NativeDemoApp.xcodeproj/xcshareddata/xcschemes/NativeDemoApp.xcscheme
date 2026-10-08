@@ -41,12 +41,12 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES"
+      shouldUseLaunchSchemeArgsEnv = "NO"
       shouldAutocreateTestPlan = "NO">
       <Testables>
          <TestableReference
             skipped = "NO"
-            parallelizable = "YES">
+            parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "U10000300000000000000001"
@@ -65,6 +65,13 @@
             ReferencedContainer = "container:NativeDemoApp.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
+      <EnvironmentVariables>
+         <EnvironmentVariable
+            key = "TZ"
+            value = "Asia/Shanghai"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+      </EnvironmentVariables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"

@@ -7,6 +7,7 @@ enum LifeSceneKind: String, CaseIterable, Hashable {
     case workMeal
     case commute
     case cityRoute
+    case carDaily
     case convenienceSupply
     case groceries
     case homeSupply
@@ -212,6 +213,14 @@ enum LifeSceneSemanticService {
                 semanticTag: "#出门办事",
                 supportTag: "#城市里移动"
             )
+        case .carDaily:
+            return LifeSceneWeeklyCopy(
+                fact: "车主日常记了 \(count) 次",
+                cares: ["车的事情安排好，路上就少一点担心", "保养、年检这些，也是在把日子理顺"],
+                leadingTag: "#车主日常\(count)次",
+                semanticTag: "#车上的事",
+                supportTag: "#一路顺利"
+            )
         case .convenienceSupply:
             return LifeSceneWeeklyCopy(
                 fact: "便利店和即时补给记了 \(count) 次",
@@ -381,6 +390,8 @@ enum LifeSceneSemanticService {
             return "人情往来记一笔"
         case .leisure:
             return "放松娱乐记一笔"
+        case .carDaily:
+            return amount <= 20 ? "车主日常记一笔" : "车这边记一笔"
         case .errand:
             return "临时办事记一笔"
         case .general:
@@ -487,7 +498,7 @@ enum LifeSceneSemanticService {
         if containsAny(text, ["便利蜂", "便利店", "全家", "罗森", "7-11", "711", "美宜佳", "茶叶蛋", "饭团", "关东煮", "小食"]) {
             add(.convenienceSupply, 6.6, .daily, "便利店补给", "#便利店", 26)
         }
-        if containsAny(text, ["买菜", "食材", "盒马", "叮咚", "小象超市", "京东到家", "京东秒送", "朴朴", "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈", "菜场", "水果", "饭桌", "生鲜", "蔬菜", "鸡蛋", "淘宝买菜", "美团买菜", "牛奶", "鲜奶", "纯牛奶", "酸奶", "认养一头牛", "特仑苏", "伊利", "蒙牛", "光明", "金典", "简爱", "悦鲜活"]) || SemanticBoundaryGuard.matchesBabySupply(text) {
+        if containsAny(text, ["买菜", "食材", "盒马", "叮咚", "小象超市", "京东到家", "京东秒送", "朴朴", "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈", "菜场", "水果", "饭桌", "生鲜", "蔬菜", "鸡蛋", "淘宝买菜", "美团买菜", "牛奶", "鲜奶", "纯牛奶", "酸奶", "认养一头牛", "特仑苏", "伊利", "蒙牛", "光明", "金典", "简爱", "悦鲜活", "裙带菜", "海带", "海带丝", "紫菜", "海苔"]) || SemanticBoundaryGuard.matchesBabySupply(text) {
             add(.groceries, 6.6, .daily, "超市买菜", "#超市买菜", 31)
         }
         if !containsTelecomBillCue(text),
@@ -550,7 +561,7 @@ enum LifeSceneSemanticService {
         case .dining:
             return LifeSceneSignal(kind: .quickMeal, category: .dining, score: 2.4, label: "吃饭", tag: "#吃饭", priority: 80)
         case .transport:
-            return LifeSceneSignal(kind: .cityRoute, category: .transport, score: 2.4, label: "出行", tag: "#出行", priority: 80)
+            return LifeSceneSignal(kind: .carDaily, category: .transport, score: 2.4, label: "车主日常", tag: "#车主日常", priority: 80)
         case .shopping:
             return LifeSceneSignal(kind: .shopping, category: .shopping, score: 2.2, label: "网购添置", tag: "#快递到了", priority: 80)
         case .daily:

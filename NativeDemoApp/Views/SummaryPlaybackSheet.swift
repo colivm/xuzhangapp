@@ -3253,7 +3253,12 @@ func lifeSliceSafeSharePhotoCaption(
     for anchor: SummaryMemoryAnchor,
     fallback: String
 ) -> String {
-    lifeSliceResolvedPhotoCaption(for: anchor, fallback: fallback)
+    // Health and care photos must not expose user-provided medical details in
+    // a share card. Keep the caption at the least-specific category level.
+    if anchor.role == .careRecord {
+        return anchor.sceneHint == .healthRecord ? "一条健康记录" : "一条照护记录"
+    }
+    return lifeSliceResolvedPhotoCaption(for: anchor, fallback: fallback)
 }
 
 struct NormalizedShareBackground {

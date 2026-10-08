@@ -524,6 +524,9 @@ struct AICommandRecognitionContext: Equatable, Sendable {
     var hasExplicitTimeRange: Bool
     var asksCategoryBreakdown: Bool
     var allowsHighConfidenceNounQuery: Bool
+    /// 当前复盘任务是补记（写入）任务。写入任务里只接受明确的补记动作，
+    /// 不能把一个名词短语顺势理解成只读查询。
+    var isWriteTask: Bool = false
 }
 
 struct AICommandRecognitionDecision: Equatable, Sendable {
@@ -633,13 +636,15 @@ enum AICommandRecognitionPolicy {
         let hasUnsupportedMutation = containsAny(normalized, unsupportedMutationActions) && !hasCompareLanguage
         let hasGenericCommuteGeneration = containsAny(normalized, ["生成", "新增", "添加"])
             && hasCommute
-        let hasReadOnlySignal = hasDuplicate
+        // 明确的只读动作（查、比、汇总…）才能抵消一次否定或不支持的写入意图。
+        // 可信名词短语只是“这句话像一次查询”，语气强度不足以取消 `不要补记`，
+        // 否则否定写入和通用生成都会被静默放行。
+        let hasExplicitReadOnlyAction = hasDuplicate
             || hasCompareLanguage
             || hasLargest
             || hasMemoryAction
             || hasSummary
             || hasQueryAction
-            || context.allowsHighConfidenceNounQuery
         let hasLedgerScope = context.hasCategory
             || context.hasLifeMark
             || context.asksCategoryBreakdown
@@ -662,13 +667,20 @@ enum AICommandRecognitionPolicy {
             return decision(.commuteDraft, normalized, 98, ["action:backfill", "entity:commute"] + slots)
         }
 
-        if hasNegatedWrite, !hasReadOnlySignal {
+        if hasNegatedWrite, !hasExplicitReadOnlyAction {
             return decision(.unsupported, normalized, 100, ["guard:negatedWrite"] + slots)
+        }
+
+        // 补记任务里，没有明确写入动作也没有明确只读动作的句子只是一个名词短语。
+        // 这种输入在只读任务里可以当查询，但在写入任务里必须停下来，
+        // 不能让它变成一次没被要求的写入或跑题的查询。
+        if context.isWriteTask, !hasWriteAction, !hasExplicitReadOnlyAction {
+            return decision(.unsupported, normalized, 96, ["guard:unsupportedWrite"] + slots)
         }
 
         if hasUnsupportedCreation
             || hasUnsupportedMutation
-            || (hasGenericCommuteGeneration && !hasWriteAction && !hasReadOnlySignal) {
+            || (hasGenericCommuteGeneration && !hasWriteAction && !hasExplicitReadOnlyAction) {
             return decision(.unsupported, normalized, 96, ["guard:unsupportedWrite"] + slots)
         }
 

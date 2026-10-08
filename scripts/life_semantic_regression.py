@@ -202,7 +202,8 @@ INTENTS_REQUIRING_KEYWORD_MATCH = [
     "household_service",
     "car_care",
     "digital_subscription",
-    "leisure",
+    # leisure 按产品意图对整个 .entertainment 类目兜底（requiresKeywordMatch: false），
+    # 已在 FIX-006 节确认，不再要求强制关键词匹配。
 ]
 
 DAILY_SUPPLY_EXCLUSION_IDS = [

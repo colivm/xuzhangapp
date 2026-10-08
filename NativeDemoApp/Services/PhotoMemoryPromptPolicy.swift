@@ -268,11 +268,12 @@ enum PhotoMemoryPromptPolicy {
     static func resolvedAnchorRole(for item: HomeItem) -> ResolvedPhotoMemoryAnchorRole {
         let inferred = anchorReason(for: item)
         if let storedRole = item.memoryAnchorRole,
-           let storedSceneHint = item.memoryAnchorSceneHint,
            !isAutomaticallyAssignedAnchor(item) {
             return ResolvedPhotoMemoryAnchorRole(
                 role: storedRole,
-                sceneHint: storedSceneHint,
+                // Older explicit photo metadata persisted the role before the
+                // scene hint field existed. Keep that user choice qualified.
+                sceneHint: item.memoryAnchorSceneHint ?? legacySceneHint(for: storedRole),
                 isQualified: true
             )
         }
@@ -288,6 +289,16 @@ enum PhotoMemoryPromptPolicy {
             sceneHint: .experience,
             isQualified: false
         )
+    }
+
+    private static func legacySceneHint(for role: PhotoMemoryAssetRole) -> PhotoMemorySceneHint {
+        switch role {
+        case .moment: return .experience
+        case .receipt: return .experience
+        case .place: return .travel
+        case .object: return .importantPurchase
+        case .careRecord: return .careRecord
+        }
     }
 
     static func refreshedAutomaticAnchorMetadata(
@@ -359,6 +370,12 @@ enum PhotoMemoryPromptPolicy {
 
     private static func isRoutineCommute(item: HomeItem, signal: LifeSceneSignal, text: String) -> Bool {
         if containsAny(text, vehicleEvidenceKeywords) || containsAny(text, travelKeywords) {
+            return false
+        }
+        // A title can mention when an experience happened (for example,
+        // "下班后看电影") without describing a commute. Preserve the stronger
+        // experience evidence so automatic photo metadata can be reassigned.
+        if item.category == .entertainment && containsAny(text, experienceKeywords) {
             return false
         }
         if signal.kind == .commute { return true }

@@ -410,7 +410,9 @@ enum LegacyWeeklyCoverAdapter {
         let localTemplateID = LaunchCoverTemplateCatalog.selectTemplateID(for: selectionInput)
         let request = try CoverAIDirectorRequestFactory.make(
             factPack: context.factPack,
-            eligibleTemplateIDs: LaunchCoverTemplateCatalog.availableTemplateIDs(for: selectionInput),
+            // AI chooses among structurally valid layouts; the scene-count gate
+            // belongs to local automatic selection, not the redacted AI contract.
+            eligibleTemplateIDs: LaunchCoverTemplateCatalog.manuallyAvailableTemplateIDs(for: selectionInput),
             localTemplateID: localTemplateID,
             localPaletteID: source.paletteID,
             localBackgroundFamily: source.backgroundFamily

@@ -4591,7 +4591,8 @@ struct InsightWebView: View {
                 hasExplicitTimeRange: aiCommandHasExplicitTimeRange(normalized),
                 asksCategoryBreakdown: aiCommandAsksCategoryBreakdown(normalized),
                 allowsHighConfidenceNounQuery: reviewTaskIntent == .query
-                    && candidateLifeMarkIntent?.supportsNounPhraseQuery == true
+                    && candidateLifeMarkIntent?.supportsNounPhraseQuery == true,
+                isWriteTask: reviewTaskIntent == .backfill
             )
             let decision = AICommandRecognitionPolicy.interpret(normalized, context: context)
             let lifeMarkIntent = resolvedLifeMarkIntent(

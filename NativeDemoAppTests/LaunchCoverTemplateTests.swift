@@ -142,7 +142,7 @@ final class LaunchCoverTemplateTests: XCTestCase {
         // 场景不足：只有通用模板可自动选中，分享功能不失效。
         let noScene = selectionInput(
             preferredTemplateID: nil,
-            photoCount: 2,
+            photoCount: 7,
             sceneKeys: []
         )
         let manual = LaunchCoverTemplateCatalog.manuallyAvailableTemplateIDs(for: noScene)
@@ -173,7 +173,7 @@ final class LaunchCoverTemplateTests: XCTestCase {
         // 恰好一种场景：只解锁 minimumSceneKindCount == 1 的模板。
         let oneScene = selectionInput(
             preferredTemplateID: nil,
-            photoCount: 2,
+            photoCount: 7,
             sceneKeys: ["scene:coffee"]
         )
         let oneSceneAutomatic = LaunchCoverTemplateCatalog.availableTemplateIDs(for: oneScene)
@@ -195,7 +195,7 @@ final class LaunchCoverTemplateTests: XCTestCase {
         // 场景种类数单调递增：种类越多，自动可选集合只增不减。
         let twoScene = selectionInput(
             preferredTemplateID: nil,
-            photoCount: 2,
+            photoCount: 7,
             sceneKeys: ["scene:coffee", "scene:groceries"]
         )
         let twoSceneAutomatic = LaunchCoverTemplateCatalog.availableTemplateIDs(for: twoScene)
@@ -216,7 +216,7 @@ final class LaunchCoverTemplateTests: XCTestCase {
         // 场景丰富：三个场景专属模板也应解锁。
         let threeScene = selectionInput(
             preferredTemplateID: nil,
-            photoCount: 2,
+            photoCount: 7,
             sceneKeys: ["scene:coffee", "scene:groceries", "scene:leisure"]
         )
         let threeSceneAutomatic = LaunchCoverTemplateCatalog.availableTemplateIDs(for: threeScene)
@@ -229,7 +229,7 @@ final class LaunchCoverTemplateTests: XCTestCase {
         // 场景键内容不影响解锁结果，只有种类数影响。
         let relabeled = selectionInput(
             preferredTemplateID: nil,
-            photoCount: 2,
+            photoCount: 7,
             sceneKeys: ["scene:cityRoute", "scene:lodging", "scene:social"]
         )
         XCTAssertEqual(
