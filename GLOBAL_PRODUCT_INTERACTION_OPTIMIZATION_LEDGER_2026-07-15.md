@@ -6375,3 +6375,14 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 审核登录说明：被拒时的 `REVIEW_LOGIN_EXPIRES_AT` 为 2026-10-01，审核日 9-23 仍在有效期内，所以过期不是原因；真实原因没有日志可查，用户决定直接重新配置。`IAP_DIAGNOSTICS_*` 只用于支付诊断，与登录无关。客户端还有一个可能导致同样现象的缺陷：登录成功后 `fetchMemberMe` 失败会让整个登录被判为失败（`SettingsViewModel.swift` 的 `verifySMSLogin`）。这个缺陷本次没有修，留作 FIX-008 待用户决定。
 - 冻结边界：未修改产品代码、工程配置、环境模板或后端逻辑，未部署，未操作 App Store Connect。用户主工作区的未跟踪资料与 `RecordView.swift` 的 stat 缓存状态都没动。
 - 剩余风险与下一步：对新的 release HEAD 跑 Xcode Cloud Build、Test 和 Archive，产出新 Build 号；提交前用 TestFlight 生产包按审核备注实际登录一次，并尽量在 iPad 或 iPad 模拟器（iPadOS 27）上验证；`REVIEW_LOGIN_EXPIRES_AT` 必须覆盖整个审核期。Archive、真机矩阵、iOS 27.0 运行时覆盖仍未完成。
+
+### 221. FIX-008：短信登录成功后会员刷新失败不再回退为登录失败（2026-10-08）
+
+- 状态：`CODE_DONE`（代码与 Windows 门禁完成；Swift 编译、XCTest 与 iPad/iPhone 真机登录待 Xcode Cloud 和真机确认）
+- 背景：App Review 拒绝 `1.0 (405)`（第 220 节），现象是点「验证并登录」后停在登录页。代码审计发现 `SettingsViewModel.verifySMSLogin` 在 `/v1/auth/sms/verify` 成功并保存令牌后，仍然用 `try await` 调用 `fetchMemberMe`。这个调用一旦超时、5xx 或网络中断就会抛错进入 catch：界面提示「登录没有成功」，`hasCloudSession` 一直为 false，界面停在登录页，但令牌和 `cloudUserId` 已经写入，形成半登录状态。这与审核现象一致，但没有日志能证明它就是本次被拒的原因；审核登录配置已由用户另行重新配置。
+- 修改：`fetchMemberMe` 改为 `try?`，与上一行的 `fetchAccountMe` 处理方式一致。刷新成功时照常覆盖会员等级和到期时间，并执行主题权限检查与持久化；刷新失败时保留 verify 响应中的 `memberTier` / `memberExpiresAt`（这一步之前已写入并执行过主题检查），登录照常完成。verify 本身失败、协议未勾选、手机号或验证码校验等路径都没有改。
+- 文件：`NativeDemoApp/ViewModels/SettingsViewModel.swift`（只改 `verifySMSLogin` 中 7 行，保留原有 CRLF 行尾）；`scripts/experience_static_check.ps1` 新增 1 条防回流断言（`fetchMemberMe` 必须是 `try?`，且位于 `hasCloudSession = true` 之前）。
+- 没有加 XCTest 的原因：`SettingsViewModel` 内部直接创建 `AuthService(baseURL:)`，没有注入点；为了测试改成可注入，属于本任务范围之外的重构。防回流目前靠静态断言，行为需要真机验证。
+- 验证证据（Windows）：`run_experience_static_check.py` 显示 `OK (1086 checks passed)`，包含新断言；staging 分支 `validate_release_gate.py --phase windows` 输出 `release_repository_gate: OK`。生产分支的门禁结果见同步提交。
+- 冻结边界：没有改后端、审核登录策略、协议勾选门槛、错误文案、会员权益、IAP 或 UI。`restoreCloudSession` 等其他调用 `fetchMemberMe` 的路径不变。
+- 剩余风险与下一步：用 Xcode Cloud 跑 Build、Test 和 Archive，确认 Swift 能编译、624 条 XCTest 不回归；在 TestFlight 生产包上用审核账号登录，并在网络不稳定时（例如登录瞬间切换网络）确认不再退回登录页，iPadOS 27 优先。

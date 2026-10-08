@@ -424,11 +424,13 @@ final class SettingsViewModel: ObservableObject {
             if let account = try? await client.fetchAccountMe(accessToken: session.accessToken) {
                 applyCloudAccount(account, allowsPendingCloudSyncDecision: true)
             }
-            let tier = try await client.fetchMemberMe(accessToken: session.accessToken)
-            settings.memberTier = tier.tier
-            settings.memberExpiresAt = tier.expiresAt
-            enforceCurrentThemeAccess(showsMessage: true)
-            persist()
+            // verify 已返回会员状态并保存了令牌；会员刷新失败不能让已成功的登录退回登录页。
+            if let tier = try? await client.fetchMemberMe(accessToken: session.accessToken) {
+                settings.memberTier = tier.tier
+                settings.memberExpiresAt = tier.expiresAt
+                enforceCurrentThemeAccess(showsMessage: true)
+                persist()
+            }
             hasCloudSession = true
             notifyNarrativeAIConfigurationChanged()
             authMessage = "登录成功。"
